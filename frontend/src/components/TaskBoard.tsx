@@ -1,3 +1,12 @@
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  CardTitle,
+  CardAction,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
 interface Task {
   id: number;
   title: string;
@@ -5,8 +14,6 @@ interface Task {
   project_name?: string;
   assigned_agent?: string;
   status: string;
-  created_at: string;
-  updated_at: string;
 }
 
 interface TaskBoardProps {
@@ -16,10 +23,10 @@ interface TaskBoardProps {
 }
 
 const COLUMNS = [
-  { key: "pending", label: "Pending", color: "text-amber-400", dot: "bg-amber-400" },
-  { key: "in_progress", label: "In Progress", color: "text-indigo-400", dot: "bg-indigo-400 animate-pulse" },
-  { key: "done", label: "Done", color: "text-emerald-400", dot: "bg-emerald-400" },
-] as const;
+  { key: "pending" as const, label: "Pending" },
+  { key: "in_progress" as const, label: "In Progress" },
+  { key: "done" as const, label: "Done" },
+];
 
 export function TaskBoard({ pending, inProgress, done }: TaskBoardProps) {
   const columns = { pending, in_progress: inProgress, done };
@@ -27,8 +34,8 @@ export function TaskBoard({ pending, inProgress, done }: TaskBoardProps) {
 
   if (total === 0) {
     return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-zinc-500 text-sm">
-        No tasks yet — create one via the API to get started.
+      <div className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground text-sm">
+        No tasks yet — create one via the Tasks page.
       </div>
     );
   }
@@ -36,27 +43,25 @@ export function TaskBoard({ pending, inProgress, done }: TaskBoardProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {COLUMNS.map((col) => (
-        <div key={col.key} className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${col.dot}`} />
-              <span className={`text-sm font-medium ${col.color}`}>{col.label}</span>
-            </div>
-            <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5">
-              {columns[col.key].length}
-            </span>
-          </div>
-
-          <div className="p-3 space-y-2 min-h-[120px]">
+        <Card key={col.key}>
+          <CardHeader className="border-b">
+            <CardTitle className="text-sm">{col.label}</CardTitle>
+            <CardAction>
+              <Badge variant="secondary">{columns[col.key].length}</Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="space-y-2 min-h-[80px]">
             {columns[col.key].length === 0 ? (
-              <div className="text-xs text-zinc-600 text-center py-4">empty</div>
+              <p className="text-xs text-muted-foreground text-center py-4">
+                Empty
+              </p>
             ) : (
               columns[col.key].map((task) => (
                 <TaskCard key={task.id} task={task} />
               ))
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -64,25 +69,27 @@ export function TaskBoard({ pending, inProgress, done }: TaskBoardProps) {
 
 function TaskCard({ task }: { task: Task }) {
   return (
-    <div className="rounded-lg bg-zinc-800/60 border border-zinc-700/50 p-3 space-y-2 hover:border-zinc-600 transition-colors">
-      <div className="text-sm text-zinc-200 font-medium leading-snug">{task.title}</div>
-
-      {task.description && (
-        <div className="text-xs text-zinc-500 line-clamp-2">{task.description}</div>
-      )}
-
-      <div className="flex items-center gap-2 flex-wrap">
-        {task.project_name && (
-          <span className="text-xs bg-zinc-900 text-zinc-400 px-2 py-0.5 rounded-full border border-zinc-700">
-            {task.project_name}
-          </span>
+    <Card size="sm" className="bg-secondary/50">
+      <CardContent className="space-y-2">
+        <p className="text-sm font-medium leading-snug">{task.title}</p>
+        {task.description && (
+          <p className="text-xs text-muted-foreground line-clamp-2">
+            {task.description}
+          </p>
         )}
-        {task.assigned_agent && (
-          <span className="text-xs bg-indigo-950/60 text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-800/40">
-            @{task.assigned_agent}
-          </span>
-        )}
-      </div>
-    </div>
+        <div className="flex flex-wrap gap-1">
+          {task.project_name && (
+            <Badge variant="outline" className="text-xs">
+              {task.project_name}
+            </Badge>
+          )}
+          {task.assigned_agent && (
+            <Badge variant="secondary" className="text-xs">
+              @{task.assigned_agent}
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

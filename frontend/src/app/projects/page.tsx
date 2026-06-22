@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  CardFooter,
+  CardTitle,
+  CardDescription,
+  CardAction,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,23 +76,38 @@ export default function ProjectsPage() {
 }
 
 function ProjectCard({ project }: { project: Project }) {
+  const date = new Date(project.created_at).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
   return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-3 hover:border-border/70 transition-colors">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="font-semibold text-sm">{project.name}</div>
-          {project.description && (
-            <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{project.description}</div>
-          )}
-        </div>
-        <span className="text-xs bg-secondary text-secondary-foreground rounded-full px-2.5 py-0.5 shrink-0">
-          {project.task_count} {project.task_count === 1 ? "task" : "tasks"}
-        </span>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{project.name}</CardTitle>
+        {project.description && (
+          <CardDescription className="line-clamp-2">
+            {project.description}
+          </CardDescription>
+        )}
+        <CardAction>
+          <Badge variant="secondary">
+            {project.task_count} {project.task_count === 1 ? "task" : "tasks"}
+          </Badge>
+        </CardAction>
+      </CardHeader>
       {project.repo_path && (
-        <p className="text-xs text-muted-foreground font-mono truncate">{project.repo_path}</p>
+        <CardContent>
+          <p className="text-xs text-muted-foreground font-mono truncate">
+            {project.repo_path}
+          </p>
+        </CardContent>
       )}
-    </div>
+      <CardFooter>
+        <p className="text-xs text-muted-foreground">{date}</p>
+      </CardFooter>
+    </Card>
   );
 }
 
