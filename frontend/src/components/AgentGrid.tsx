@@ -17,11 +17,26 @@ const MODEL_LABEL: Record<string, string> = {
   "claude-haiku-4-5": "Haiku 4.5",
 };
 
-const ROLE_ICON: Record<string, string> = {
-  "Full-Stack Developer": "💻",
-  "Research Analyst": "🔍",
-  "Internal Support": "🛟",
-};
+const AVATAR_COLORS = [
+  "bg-indigo-600",
+  "bg-violet-600",
+  "bg-rose-600",
+  "bg-amber-600",
+  "bg-teal-600",
+  "bg-cyan-600",
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string): string {
+  return name.slice(0, 1).toUpperCase();
+}
 
 export function AgentGrid({ agents }: AgentGridProps) {
   if (agents.length === 0) {
@@ -52,7 +67,13 @@ function AgentCard({ agent }: { agent: Agent }) {
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="text-2xl">{ROLE_ICON[agent.role] ?? "🤖"}</div>
+          <div
+            className={`w-10 h-10 rounded-xl ${getAvatarColor(agent.name)} flex items-center justify-center shrink-0`}
+          >
+            <span className="text-white font-semibold text-base leading-none">
+              {getInitials(agent.name)}
+            </span>
+          </div>
           <div>
             <div className="font-semibold text-zinc-100">{agent.name}</div>
             <div className="text-xs text-zinc-500">{agent.role}</div>
@@ -84,7 +105,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={`
-        inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium
+        inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium shrink-0
         ${isWorking
           ? "bg-indigo-500/20 text-indigo-300"
           : "bg-zinc-800 text-zinc-400"

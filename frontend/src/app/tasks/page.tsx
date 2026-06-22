@@ -62,8 +62,8 @@ export default function TasksPage() {
   const byStatus = (status: Task["status"]) => tasks.filter((t) => t.status === status);
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div>
           <h1 className="text-2xl font-semibold">Tasks</h1>
           <p className="text-muted-foreground text-sm mt-1">Track what your agents are working on</p>
@@ -91,7 +91,7 @@ export default function TasksPage() {
       {loading ? (
         <div className="text-muted-foreground text-sm">Loading…</div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {COLUMNS.map((col) => (
             <div key={col.id}>
               <div className="flex items-center gap-2 mb-3">

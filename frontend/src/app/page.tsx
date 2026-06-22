@@ -1,7 +1,6 @@
 import { AgentGrid } from "@/components/AgentGrid";
 import { TaskBoard } from "@/components/TaskBoard";
 import { ProjectRegistry } from "@/components/ProjectRegistry";
-import { Header } from "@/components/Header";
 
 export const dynamic = "force-dynamic";
 
@@ -54,22 +53,40 @@ export default async function Dashboard() {
 
   return (
     <div className="min-h-screen bg-zinc-950">
-      <Header agentCount={agents.length} taskCount={tasks.length} projectCount={projects.length} />
+      {/* Stats sub-header */}
+      <div className="border-b border-zinc-800 bg-zinc-900/40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-base sm:text-lg font-semibold text-zinc-100 leading-tight">
+              Command Center
+            </h1>
+            <p className="text-xs text-zinc-500 mt-0.5 hidden sm:block">
+              Monitor your agent team
+            </p>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-6">
+            <Stat label="agents" value={agents.length} />
+            <Stat label="tasks" value={tasks.length} />
+            <Stat label="projects" value={projects.length} />
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="hidden sm:inline">live</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-10">
-        {/* Agents */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8 sm:space-y-10">
         <section>
           <SectionLabel>Agents</SectionLabel>
           <AgentGrid agents={agents} />
         </section>
 
-        {/* Task Board */}
         <section>
           <SectionLabel>Task Board</SectionLabel>
           <TaskBoard pending={pending} inProgress={inProgress} done={done} />
         </section>
 
-        {/* Projects */}
         <section>
           <SectionLabel>Projects</SectionLabel>
           <ProjectRegistry projects={projects} />
@@ -84,5 +101,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-4">
       {children}
     </h2>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="text-right">
+      <div className="text-sm font-semibold text-zinc-100">{value}</div>
+      <div className="text-xs text-zinc-500">{label}</div>
+    </div>
   );
 }
