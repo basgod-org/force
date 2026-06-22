@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - force_db:/app/data
+    environment:
+      - DB_PATH=/app/data/force.db
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8090
+    depends_on:
+      - backend
+
+volumes:
+  force_db:

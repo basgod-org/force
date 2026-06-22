@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 async function getAgents() {
   try {
-    const res = await fetch("http://localhost:8000/api/agents", {
+    const res = await fetch("http://localhost:8090/api/agents", {
       next: { revalidate: 10 },
     });
     if (!res.ok) return [];
@@ -19,7 +19,7 @@ async function getAgents() {
 
 async function getTasks() {
   try {
-    const res = await fetch("http://localhost:8000/api/tasks", {
+    const res = await fetch("http://localhost:8090/api/tasks", {
       next: { revalidate: 10 },
     });
     if (!res.ok) return [];
@@ -31,7 +31,7 @@ async function getTasks() {
 
 async function getProjects() {
   try {
-    const res = await fetch("http://localhost:8000/api/projects", {
+    const res = await fetch("http://localhost:8090/api/projects", {
       next: { revalidate: 10 },
     });
     if (!res.ok) return [];
