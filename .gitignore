@@ -1,0 +1,14 @@
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/force.db
+
+# Frontend
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
+
+# General
+.DS_Store
+*.env

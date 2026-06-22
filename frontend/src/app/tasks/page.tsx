@@ -1,0 +1,223 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { api, Task, Project, Agent } from "@/lib/api";
+
+const COLUMNS: { id: Task["status"]; label: string }[] = [
+  { id: "pending", label: "Pending" },
+  { id: "in_progress", label: "In Progress" },
+  { id: "done", label: "Done" },
+];
+
+const STATUS_NEXT: Record<Task["status"], Task["status"] | null> = {
+  pending: "in_progress",
+  in_progress: "done",
+  done: null,
+};
+
+export default function TasksPage() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    const [t, p, a] = await Promise.all([api.tasks.list(), api.projects.list(), api.agents.list()]);
+    setTasks(t);
+    setProjects(p);
+    setAgents(a);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const advance = async (task: Task) => {
+    const next = STATUS_NEXT[task.status];
+    if (!next) return;
+    const updated = await api.tasks.update(task.id, { status: next });
+    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+  };
+
+  const byStatus = (status: Task["status"]) => tasks.filter((t) => t.status === status);
+
+  return (
+    <div className="p-8">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-semibold">Tasks</h1>
+          <p className="text-muted-foreground text-sm mt-1">Track what your agents are working on</p>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger render={<Button size="sm" />}>
+            + New Task
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Task</DialogTitle>
+            </DialogHeader>
+            <TaskForm
+              projects={projects}
+              agents={agents}
+              onCreated={(t) => {
+                setTasks((prev) => [t, ...prev]);
+                setOpen(false);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {loading ? (
+        <div className="text-muted-foreground text-sm">Loading…</div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {COLUMNS.map((col) => (
+            <div key={col.id}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm font-medium">{col.label}</span>
+                <Badge variant="secondary" className="text-xs">{byStatus(col.id).length}</Badge>
+              </div>
+              <div className="flex flex-col gap-2">
+                {byStatus(col.id).map((task) => (
+                  <TaskCard key={task.id} task={task} onAdvance={() => advance(task)} />
+                ))}
+                {byStatus(col.id).length === 0 && (
+                  <div className="border border-dashed border-border rounded-md p-4 text-xs text-muted-foreground text-center">
+                    No tasks
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskCard({ task, onAdvance }: { task: Task; onAdvance: () => void }) {
+  const next = STATUS_NEXT[task.status];
+  return (
+    <Card className="text-sm">
+      <CardHeader className="pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-medium leading-snug">{task.title}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 space-y-3">
+        {task.description && (
+          <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+        )}
+        <div className="flex flex-wrap gap-1">
+          {task.project_name && (
+            <Badge variant="outline" className="text-xs">{task.project_name}</Badge>
+          )}
+          {task.assigned_agent && (
+            <Badge variant="secondary" className="text-xs">{task.assigned_agent}</Badge>
+          )}
+        </div>
+        {next && (
+          <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={onAdvance}>
+            Move to {next === "in_progress" ? "In Progress" : "Done"} →
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TaskForm({
+  projects,
+  agents,
+  onCreated,
+}: {
+  projects: Project[];
+  agents: Agent[];
+  onCreated: (t: Task) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [projectId, setProjectId] = useState<string>("");
+  const [agent, setAgent] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const task = await api.tasks.create({
+        title,
+        description: description || undefined,
+        project_id: projectId ? parseInt(projectId) : undefined,
+        assigned_agent: agent || undefined,
+      });
+      onCreated(task);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="title">Title</Label>
+        <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title" required />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="desc">Description</Label>
+        <Textarea id="desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" rows={3} />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Project</Label>
+        <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select project" />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Assign Agent</Label>
+        <Select value={agent} onValueChange={(v) => setAgent(v ?? "")}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select agent" />
+          </SelectTrigger>
+          <SelectContent>
+            {agents.map((a) => (
+              <SelectItem key={a.id} value={a.name}>{a.name} — {a.role}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex justify-end">
+        <Button type="submit" disabled={saving || !title.trim()}>
+          {saving ? "Creating…" : "Create Task"}
+        </Button>
+      </div>
+    </form>
+  );
+}
