@@ -61,7 +61,7 @@ async def init_db():
             )
         """)
         # Migrate existing DB: add columns if missing
-        for col, typedef in [("session_id", "TEXT"), ("agent_type", "TEXT")]:
+        for col, typedef in [("session_id", "TEXT"), ("agent_type", "TEXT"), ("is_chat", "INTEGER DEFAULT 0")]:
             try:
                 await db.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}")
             except Exception:

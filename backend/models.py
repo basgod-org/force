@@ -28,8 +28,17 @@ class Task(BaseModel):
     status: str  # pending | in_progress | done
     session_id: Optional[str] = None
     agent_type: Optional[str] = None
+    is_chat: Optional[int] = 0
     created_at: str
     updated_at: str
+
+
+class ChatCreate(BaseModel):
+    message: str
+
+
+class ChatReply(BaseModel):
+    message: str
 
 
 class TaskCreate(BaseModel):

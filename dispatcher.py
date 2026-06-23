@@ -14,6 +14,10 @@ STUCK_AFTER_MINUTES = 30
 CLAUDE_BIN = "/home/pruthvi/.local/bin/claude"
 DISPATCHER_LOG = "/tmp/force-dispatcher.log"
 
+# OpenClaw hook endpoint — used to wake dedicated persistent agents
+OPENCLAW_HOOK = "http://127.0.0.1:18789/hooks/agent"
+OPENCLAW_TOKEN = "force-hook-x9k2m7p4q1"
+
 
 def api_call(method, path, data=None):
     url = f"{API}{path}"
@@ -165,15 +169,36 @@ def dispatch_task(task):
         "body": f"Assigned to @{agent_type}. Starting work now.",
     })
 
-    # Run claude with --dangerously-skip-permissions so tools work without
-    # approval prompts. Prompt is the positional arg; --print = non-interactive.
-    # Start inside the project's repo so the agent can build, commit, and push.
     repo_path = get_repo_path(task)
-    cwd = repo_path or "/home/pruthvi/Projects"
     prompt = build_prompt(task, agent_type, repo_path)
+
+    # Try the OpenClaw hook API first (persistent dedicated agents)
+    hook_payload = json.dumps({
+        "message": prompt,
+        "name": f"Force task #{task_id}",
+        "agentId": agent_type,
+    }).encode()
+    hook_req = urllib.request.Request(
+        OPENCLAW_HOOK,
+        data=hook_payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENCLAW_TOKEN}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(hook_req, timeout=10) as r:
+            if r.status in (200, 201, 202):
+                return  # Successfully handed off to OpenClaw agent
+    except Exception:
+        pass
+
+    # Fallback: spawn claude directly if hook isn't available
     log_fh = open(DISPATCHER_LOG, "a")
     env = os.environ.copy()
     env["PATH"] = f"/home/pruthvi/.local/bin:{env.get('PATH', '/usr/bin:/bin')}"
+    cwd = repo_path or "/home/pruthvi/Projects"
     subprocess.Popen(
         [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
         stdout=log_fh,

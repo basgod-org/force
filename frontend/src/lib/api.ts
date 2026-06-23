@@ -86,6 +86,11 @@ export const api = {
   agents: {
     list: () => req<Agent[]>("/api/agents"),
     stats: (id: string) => req<AgentStats>(`/api/agents/${id}/stats`),
+    chats: (id: string) => req<Task[]>(`/api/agents/${id}/chats`),
+    chat: (id: string, message: string) =>
+      req<Task>(`/api/agents/${id}/chat`, { method: "POST", body: JSON.stringify({ message }) }),
+    chatReply: (id: string, taskId: number, message: string) =>
+      req<Comment>(`/api/agents/${id}/chat/${taskId}/reply`, { method: "POST", body: JSON.stringify({ message }) }),
   },
   projects: {
     list: () => req<Project[]>("/api/projects"),

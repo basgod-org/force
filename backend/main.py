@@ -12,11 +12,33 @@ FORCE_API = "https://teams.basgod.com/api"
 DISPATCHER_LOG = "/tmp/force-dispatcher.log"
 
 from database import init_db, get_db
+import urllib.request
+import json
+
 from models import (
     Agent, Project, ProjectCreate,
     Task, TaskCreate, TaskUpdate, TaskClaim,
     Comment, CommentCreate, TaskEvent,
+    ChatCreate, ChatReply,
 )
+
+OPENCLAW_HOOK = "http://127.0.0.1:18789/hooks/agent"
+OPENCLAW_TOKEN = "force-hook-x9k2m7p4q1"
+
+
+def _dispatch_to_hook(agent_id: str, message: str, name: str = "Force Chat") -> bool:
+    payload = json.dumps({"message": message, "name": name, "agentId": agent_id}).encode()
+    req = urllib.request.Request(
+        OPENCLAW_HOOK,
+        data=payload,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {OPENCLAW_TOKEN}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return r.status in (200, 201, 202)
+    except Exception:
+        return False
 
 AGENTS: List[Agent] = [
     Agent(id="dev", name="Dev", role="Full-Stack Developer", model="claude-opus-4-8", status="idle"),
@@ -117,10 +139,10 @@ async def create_project(body: ProjectCreate, db: aiosqlite.Connection = Depends
 async def list_tasks(status: Optional[str] = None, db: aiosqlite.Connection = Depends(get_db)):
     if status:
         cursor = await db.execute(
-            TASK_SELECT + " WHERE t.status = ? ORDER BY t.created_at ASC", (status,)
+            TASK_SELECT + " WHERE t.status = ? AND (t.is_chat = 0 OR t.is_chat IS NULL) ORDER BY t.created_at ASC", (status,)
         )
     else:
-        cursor = await db.execute(TASK_SELECT + " ORDER BY t.created_at DESC")
+        cursor = await db.execute(TASK_SELECT + " WHERE (t.is_chat = 0 OR t.is_chat IS NULL) ORDER BY t.created_at DESC")
     rows = await cursor.fetchall()
     return [Task(**dict(row)) for row in rows]
 
@@ -299,6 +321,89 @@ async def list_events(task_id: int, db: aiosqlite.Connection = Depends(get_db)):
     )
     rows = await cursor.fetchall()
     return [TaskEvent(**dict(row)) for row in rows]
+
+
+@app.get("/api/agents/{agent_id}/chats", response_model=List[Task])
+async def list_chats(agent_id: str, db: aiosqlite.Connection = Depends(get_db)):
+    cursor = await db.execute(
+        TASK_SELECT + " WHERE t.assigned_agent = ? AND t.is_chat = 1 ORDER BY t.updated_at DESC LIMIT 20",
+        (agent_id,),
+    )
+    rows = await cursor.fetchall()
+    return [Task(**dict(row)) for row in rows]
+
+
+@app.post("/api/agents/{agent_id}/chat", status_code=201)
+async def start_chat(agent_id: str, body: ChatCreate, db: aiosqlite.Connection = Depends(get_db)):
+    agent = next((a for a in AGENTS if a.id == agent_id), None)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    cursor = await db.execute(
+        "INSERT INTO tasks (title, assigned_agent, agent_type, status, is_chat) VALUES (?, ?, ?, 'in_progress', 1)",
+        (f"Chat: {body.message[:60]}", agent_id, agent_id),
+    )
+    task_id = cursor.lastrowid
+    await db.execute(
+        "INSERT INTO comments (task_id, author, body) VALUES (?, 'user', ?)",
+        (task_id, body.message),
+    )
+    await db.commit()
+
+    prompt = _build_chat_prompt(agent_id, agent.name, task_id, [{"author": "user", "body": body.message}])
+    asyncio.get_event_loop().run_in_executor(None, lambda: _dispatch_to_hook(agent_id, prompt, f"Chat #{task_id}"))
+
+    row = await (await db.execute(TASK_SELECT + " WHERE t.id = ?", (task_id,))).fetchone()
+    return Task(**dict(row))
+
+
+@app.post("/api/agents/{agent_id}/chat/{task_id}/reply", response_model=Comment, status_code=201)
+async def reply_chat(agent_id: str, task_id: int, body: ChatReply, db: aiosqlite.Connection = Depends(get_db)):
+    task = await (await db.execute("SELECT * FROM tasks WHERE id = ? AND assigned_agent = ? AND is_chat = 1", (task_id, agent_id))).fetchone()
+    if not task:
+        raise HTTPException(status_code=404, detail="Chat thread not found")
+
+    cursor = await db.execute(
+        "INSERT INTO comments (task_id, author, body) VALUES (?, 'user', ?)",
+        (task_id, body.message),
+    )
+    await db.execute("UPDATE tasks SET status = 'in_progress', updated_at = datetime('now') WHERE id = ?", (task_id,))
+    await db.commit()
+
+    comment_row = await (await db.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,))).fetchone()
+
+    all_comments = await (await db.execute(
+        "SELECT author, body FROM comments WHERE task_id = ? ORDER BY created_at ASC", (task_id,)
+    )).fetchall()
+    agent = next((a for a in AGENTS if a.id == agent_id), None)
+    prompt = _build_chat_prompt(agent_id, agent.name if agent else agent_id, task_id, [dict(r) for r in all_comments])
+    asyncio.get_event_loop().run_in_executor(None, lambda: _dispatch_to_hook(agent_id, prompt, f"Chat #{task_id}"))
+
+    return Comment(**dict(comment_row))
+
+
+def _build_chat_prompt(agent_id: str, agent_name: str, task_id: int, messages: list) -> str:
+    history = "\n".join(
+        f"{'You' if m['author'] not in ('user',) else 'User'}: {m['body']}"
+        for m in messages
+    )
+    return f"""You are {agent_name}, a live AI assistant. A user is chatting with you directly in Force.
+
+## Conversation so far:
+{history}
+
+Respond to the user's latest message naturally and conversationally. Be helpful and concise.
+
+When done, post your reply with:
+curl -s -X POST {FORCE_API}/tasks/{task_id}/comments \\
+  -H "Content-Type: application/json" \\
+  -d '{{"author": "{agent_id}", "body": "YOUR_REPLY_HERE"}}'
+
+Rules:
+- This is direct chat — do NOT do task management or mention Force workflows.
+- Do NOT message Pruthvi on Telegram or WhatsApp.
+- Keep your reply focused on what the user asked.
+"""
 
 
 @app.get("/health")
