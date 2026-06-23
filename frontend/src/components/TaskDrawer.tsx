@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, Comment, Task, TaskEvent } from "@/lib/api";
+import { Markdown } from "@/components/Markdown";
+import { formatDate, formatTime } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-500/10 text-amber-400 border-amber-500/20",
@@ -196,8 +198,8 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
               )}
 
               <div className="flex gap-4 mt-1 text-xs text-zinc-500">
-                <span>Created {new Date(task.created_at).toLocaleDateString()}</span>
-                <span>Updated {new Date(task.updated_at).toLocaleDateString()}</span>
+                <span>Created {formatDate(task.created_at)}</span>
+                <span>Updated {formatDate(task.updated_at)}</span>
               </div>
             </div>
 
@@ -278,7 +280,7 @@ function EventMarker({
       <span className="text-xs text-zinc-500">{label}</span>
       <span className="flex-1 border-t border-zinc-800" />
       <span className="text-xs text-zinc-600">
-        {new Date(time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        {formatTime(time)}
       </span>
     </div>
   );
@@ -306,10 +308,7 @@ function EventRow({ event }: { event: TaskEvent }) {
       )}
       <span className="flex-1" />
       <span className="text-xs text-zinc-600 shrink-0">
-        {new Date(event.created_at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
+        {formatTime(event.created_at)}
       </span>
     </div>
   );
@@ -351,12 +350,9 @@ function CommentBubble({ comment }: { comment: Comment }) {
             @{comment.author}
           </p>
         )}
-        <p className="leading-relaxed whitespace-pre-wrap">{comment.body}</p>
+        <Markdown>{comment.body}</Markdown>
         <p className={`text-xs mt-1 ${isUser ? "text-indigo-400/70" : "text-zinc-500"}`}>
-          {new Date(comment.created_at).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {formatTime(comment.created_at)}
         </p>
       </div>
     </div>

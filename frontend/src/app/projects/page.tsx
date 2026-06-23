@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, Project } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -80,7 +81,7 @@ export default function ProjectsPage() {
 }
 
 function ProjectCard({ project }: { project: Project }) {
-  const date = new Date(project.created_at).toLocaleDateString("en-US", {
+  const date = formatDate(project.created_at, {
     month: "short",
     day: "numeric",
     year: "numeric",

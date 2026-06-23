@@ -8,6 +8,7 @@ import {
   CardAction,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatDate } from "@/lib/utils";
 
 interface Project {
   id: number;
@@ -37,7 +38,7 @@ export function ProjectRegistry({ projects }: { projects: Project[] }) {
 }
 
 function ProjectCard({ project }: { project: Project }) {
-  const date = new Date(project.created_at).toLocaleDateString("en-US", {
+  const date = formatDate(project.created_at, {
     month: "short",
     day: "numeric",
     year: "numeric",

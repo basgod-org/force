@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { api, Agent, AgentStats, Task } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 const MODEL_LABEL: Record<string, string> = {
   "claude-opus-4-8": "Opus 4.8",
@@ -139,7 +140,7 @@ export function AgentDrawer({ agent, onClose, onTaskClick }: AgentDrawerProps) {
                         </span>
                       </div>
                       <p className="text-xs text-zinc-500 mt-1">
-                        {new Date(task.updated_at).toLocaleDateString()}
+                        {formatDate(task.updated_at)}
                       </p>
                     </button>
                   ))}
