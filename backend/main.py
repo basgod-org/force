@@ -2,7 +2,14 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import aiosqlite
+import asyncio
+import os
+import subprocess
 from typing import List, Optional
+
+CLAUDE_BIN = "/home/pruthvi/.local/bin/claude"
+FORCE_API = "https://teams.basgod.com/api"
+DISPATCHER_LOG = "/tmp/force-dispatcher.log"
 
 from database import init_db, get_db
 from models import (
@@ -243,7 +250,43 @@ async def create_comment(task_id: int, body: CommentCreate, db: aiosqlite.Connec
     row = await (await db.execute(
         "SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,)
     )).fetchone()
-    return Comment(**dict(row))
+    comment = Comment(**dict(row))
+
+    # When a human replies on a task, spawn an agent to respond
+    if body.author == "agent-request":
+        task_row = await (await db.execute(
+            "SELECT agent_type, title FROM tasks WHERE id = ?", (task_id,)
+        )).fetchone()
+        agent_type = (task_row["agent_type"] if task_row else None) or "dev"
+        prompt = (
+            f"You are the {agent_type} agent working in Force, an AI team management system.\n\n"
+            f"A human has replied on task #{task_id}. Here is the full context:\n\n"
+            f"{body.body}\n\n"
+            f"Read the context carefully and respond helpfully to the user's latest message.\n\n"
+            f"When done, post your reply as a comment:\n"
+            f'curl -s -X POST {FORCE_API}/tasks/{task_id}/comments '
+            f'-H "Content-Type: application/json" '
+            f"-d '{{\"author\": \"{agent_type}\", \"body\": \"YOUR_REPLY_HERE\"}}'\n\n"
+            f"Rules:\n"
+            f"- Do NOT message Pruthvi on Telegram or WhatsApp.\n"
+            f"- All output goes to Force task comments only.\n"
+            f"- Keep your reply focused and actionable."
+        )
+        log_fh = open(DISPATCHER_LOG, "a")
+        env = os.environ.copy()
+        env["PATH"] = f"/home/pruthvi/.local/bin:{env.get('PATH', '/usr/bin:/bin')}"
+        asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.Popen(
+                [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
+                stdout=log_fh,
+                stderr=log_fh,
+                cwd="/home/pruthvi/Projects",
+                env=env,
+            )
+        )
+
+    return comment
 
 
 @app.get("/api/tasks/{task_id}/events", response_model=List[TaskEvent])
