@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AgentGrid } from "@/components/AgentGrid";
+import { AgentHierarchy } from "@/components/AgentHierarchy";
 import { TaskBoard } from "@/components/TaskBoard";
 import { ProjectRegistry } from "@/components/ProjectRegistry";
 import { TaskDrawer } from "@/components/TaskDrawer";
@@ -59,6 +60,11 @@ export default function Dashboard() {
         </div>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-10">
+          <section>
+            <SectionLabel icon="⛓" color="text-amber-400">Team Hierarchy</SectionLabel>
+            <AgentHierarchy agents={agents} />
+          </section>
+
           <section>
             <SectionLabel icon="◈" color="text-violet-400">Agents</SectionLabel>
             <AgentGrid agents={agents} onTaskClick={setSelectedTask} />
