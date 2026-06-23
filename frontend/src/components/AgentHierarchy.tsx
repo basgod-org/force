@@ -127,13 +127,6 @@ function HierarchyNode({
     <div
       className={`relative flex items-center gap-3 rounded-xl border ${ringClass} bg-zinc-900/80 px-4 py-3 shadow-md ${connected ? glowClass : ""} transition-all duration-500`}
     >
-      {/* Connection status dot */}
-      <span
-        className={`absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-zinc-900 transition-colors duration-500 ${
-          connected ? "bg-emerald-400" : "bg-zinc-600"
-        } ${pulsing ? "animate-pulse" : ""}`}
-      />
-
       <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shrink-0 shadow-lg`}>
         <span className="text-white font-bold text-base leading-none">{avatar}</span>
       </div>
@@ -179,13 +172,6 @@ function WorkerNode({ agent }: { agent: Agent }) {
             : `${accent.idleRing} bg-zinc-900/50`
         }`}
       >
-        {/* Status dot */}
-        <span
-          className={`absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-zinc-900 transition-colors duration-500 bg-emerald-400 ${
-            isWorking ? "animate-pulse" : ""
-          }`}
-        />
-
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.avatar} flex items-center justify-center shadow-lg`}>
           <span className="text-white font-bold text-base leading-none">
             {agent.name.slice(0, 1).toUpperCase()}
