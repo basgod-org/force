@@ -2,6 +2,7 @@
 """Force task dispatcher — runs as system cron, completely silent."""
 
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -10,6 +11,8 @@ from datetime import datetime, timezone, timedelta
 
 API = "https://teams.basgod.com/api"
 STUCK_AFTER_MINUTES = 30
+CLAUDE_BIN = "/home/pruthvi/.local/bin/claude"
+DISPATCHER_LOG = "/tmp/force-dispatcher.log"
 
 
 def api_call(method, path, data=None):
@@ -125,11 +128,15 @@ def dispatch_task(task):
     # Run claude with --dangerously-skip-permissions so tools work without
     # approval prompts. Prompt is the positional arg; --print = non-interactive.
     prompt = build_prompt(task, agent_type)
+    log_fh = open(DISPATCHER_LOG, "a")
+    env = os.environ.copy()
+    env["PATH"] = f"/home/pruthvi/.local/bin:{env.get('PATH', '/usr/bin:/bin')}"
     subprocess.Popen(
-        ["claude", "--dangerously-skip-permissions", "--print", prompt],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,  # capture stderr so errors are visible in log
+        [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
+        stdout=log_fh,
+        stderr=log_fh,
         cwd="/home/pruthvi/Projects",
+        env=env,
     )
 
 
