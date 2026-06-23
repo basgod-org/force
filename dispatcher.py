@@ -53,6 +53,22 @@ def reset_stuck_tasks():
             api_call("PATCH", f"/tasks/{task_id}", {"status": "pending"})
 
 
+def get_repo_path(task):
+    """Resolve the on-disk git repo for a task's project, if any."""
+    project_id = task.get("project_id")
+    if not project_id:
+        return None
+    projects, status = api_call("GET", "/projects")
+    if not projects or status not in (200, 201):
+        return None
+    for p in projects:
+        if p.get("id") == project_id:
+            path = p.get("repo_path")
+            if path and os.path.isdir(path):
+                return path
+    return None
+
+
 def determine_agent(task):
     if task.get("assigned_agent"):
         return task["assigned_agent"]
@@ -64,7 +80,7 @@ def determine_agent(task):
     return "dev"
 
 
-def build_prompt(task, agent_type):
+def build_prompt(task, agent_type, repo_path):
     task_id = task["id"]
     title = task["title"]
     desc = task.get("description") or "No description provided."
@@ -76,6 +92,31 @@ def build_prompt(task, agent_type):
         "support": "Internal Support",
     }.get(agent_type, "Developer")
 
+    # When the project has a real code repo, instruct the agent to actually
+    # implement, build, and push — not just analyse.
+    if repo_path and agent_type != "researcher":
+        work_section = f"""## Working directory
+You have been started inside the project's git repository: `{repo_path}`
+This is a real codebase. For any task that requires code changes you MUST:
+
+1. Read the relevant files to understand the codebase before editing.
+2. Implement the change — write the actual code, do not just describe it.
+3. Build / verify it compiles or runs (e.g. `npm run build`, run tests, lint).
+4. Commit your work with a clear message:
+   `git add -A && git commit -m "<concise description of the change> (task #{task_id})"`
+5. Push to the remote so the change is live:
+   `git push origin HEAD`
+   If you are on the default branch and pushing directly is blocked, create a
+   branch first (`git checkout -b task-{task_id}`) and push that.
+
+Do not mark the task done until the code is committed AND pushed. If the build
+fails or you cannot push, report exactly what happened in your comment and set
+the status to pending."""
+    else:
+        work_section = """## Instructions
+Analyse the task and complete it to the best of your ability using your tools
+(read files, run commands, write code, search the web, etc.)."""
+
     return f"""You are the {agent_type} agent ({agent_role}) working on a task in Force, an AI team management system.
 
 ## Task
@@ -84,8 +125,7 @@ def build_prompt(task, agent_type):
 - Description: {desc}
 - Project: {project}
 
-## Instructions
-Analyse the task and complete it to the best of your ability using your tools (read files, run commands, write code, search the web, etc.).
+{work_section}
 
 You are running non-interactively — complete the full task in this single session.
 
@@ -127,7 +167,10 @@ def dispatch_task(task):
 
     # Run claude with --dangerously-skip-permissions so tools work without
     # approval prompts. Prompt is the positional arg; --print = non-interactive.
-    prompt = build_prompt(task, agent_type)
+    # Start inside the project's repo so the agent can build, commit, and push.
+    repo_path = get_repo_path(task)
+    cwd = repo_path or "/home/pruthvi/Projects"
+    prompt = build_prompt(task, agent_type, repo_path)
     log_fh = open(DISPATCHER_LOG, "a")
     env = os.environ.copy()
     env["PATH"] = f"/home/pruthvi/.local/bin:{env.get('PATH', '/usr/bin:/bin')}"
@@ -135,7 +178,7 @@ def dispatch_task(task):
         [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
         stdout=log_fh,
         stderr=log_fh,
-        cwd="/home/pruthvi/Projects",
+        cwd=cwd,
         env=env,
     )
 

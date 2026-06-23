@@ -43,17 +43,37 @@ app.add_middleware(
 
 @app.get("/api/agents", response_model=List[Agent])
 async def list_agents(db: aiosqlite.Connection = Depends(get_db)):
+    # An agent owns a task via assigned_agent, falling back to the agent_type
+    # recorded when the task was claimed by the dispatcher.
+    owner = "COALESCE(assigned_agent, agent_type)"
+
     # Reflect real working status from in_progress tasks
     cursor = await db.execute(
-        "SELECT assigned_agent, title FROM tasks WHERE status = 'in_progress'"
+        f"SELECT {owner} AS owner, title FROM tasks WHERE status = 'in_progress'"
     )
-    active = {row["assigned_agent"]: row["title"] for row in await cursor.fetchall()}
+    active = {row["owner"]: row["title"] for row in await cursor.fetchall()}
+
+    # Tally how many tasks each agent has handled (completed) and total.
+    cursor = await db.execute(
+        f"SELECT {owner} AS owner, status, COUNT(*) AS cnt FROM tasks GROUP BY owner, status"
+    )
+    completed: dict = {}
+    total: dict = {}
+    for row in await cursor.fetchall():
+        if row["owner"] is None:
+            continue
+        total[row["owner"]] = total.get(row["owner"], 0) + row["cnt"]
+        if row["status"] == "done":
+            completed[row["owner"]] = completed.get(row["owner"], 0) + row["cnt"]
+
     result = []
     for agent in AGENTS:
         a = agent.model_copy()
         if agent.id in active:
             a.status = "working"
             a.current_task = active[agent.id]
+        a.tasks_completed = completed.get(agent.id, 0)
+        a.tasks_total = total.get(agent.id, 0)
         result.append(a)
     return result
 

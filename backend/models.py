@@ -60,6 +60,8 @@ class Agent(BaseModel):
     model: str
     status: str  # idle | working
     current_task: Optional[str] = None
+    tasks_completed: int = 0
+    tasks_total: int = 0
 
 
 class Comment(BaseModel):

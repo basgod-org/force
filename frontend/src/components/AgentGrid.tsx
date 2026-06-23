@@ -104,6 +104,13 @@ function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
               <span className="text-right text-zinc-300 truncate">{agent.current_task}</span>
             </div>
           )}
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-zinc-500">Tasks handled</span>
+            <span className="text-zinc-300">
+              <span className="font-semibold text-emerald-400">{agent.tasks_completed}</span>
+              <span className="text-zinc-600"> / {agent.tasks_total} total</span>
+            </span>
+          </div>
         </div>
       </div>
     </div>

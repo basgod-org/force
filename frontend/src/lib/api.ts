@@ -7,6 +7,8 @@ export interface Agent {
   model: string;
   status: "idle" | "working";
   current_task?: string;
+  tasks_completed: number;
+  tasks_total: number;
 }
 
 export interface Project {
