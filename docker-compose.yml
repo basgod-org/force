@@ -15,7 +15,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8090
+      - NEXT_PUBLIC_API_URL=https://teams.basgod.com
     depends_on:
       - backend
 

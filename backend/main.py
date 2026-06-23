@@ -2,12 +2,13 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import aiosqlite
-from typing import List
+from typing import List, Optional
 
 from database import init_db, get_db
 from models import (
     Agent, Project, ProjectCreate,
-    Task, TaskCreate, TaskUpdate,
+    Task, TaskCreate, TaskUpdate, TaskClaim,
+    Comment, CommentCreate, TaskEvent,
 )
 
 AGENTS: List[Agent] = [
@@ -15,6 +16,12 @@ AGENTS: List[Agent] = [
     Agent(id="researcher", name="Researcher", role="Research Analyst", model="claude-sonnet-4-6", status="idle"),
     Agent(id="support", name="Support", role="Internal Support", model="claude-haiku-4-5", status="idle"),
 ]
+
+TASK_SELECT = """
+    SELECT t.*, p.name as project_name
+    FROM tasks t
+    LEFT JOIN projects p ON p.id = t.project_id
+"""
 
 
 @asynccontextmanager
@@ -35,8 +42,20 @@ app.add_middleware(
 
 
 @app.get("/api/agents", response_model=List[Agent])
-async def list_agents():
-    return AGENTS
+async def list_agents(db: aiosqlite.Connection = Depends(get_db)):
+    # Reflect real working status from in_progress tasks
+    cursor = await db.execute(
+        "SELECT assigned_agent, title FROM tasks WHERE status = 'in_progress'"
+    )
+    active = {row["assigned_agent"]: row["title"] for row in await cursor.fetchall()}
+    result = []
+    for agent in AGENTS:
+        a = agent.model_copy()
+        if agent.id in active:
+            a.status = "working"
+            a.current_task = active[agent.id]
+        result.append(a)
+    return result
 
 
 @app.get("/api/projects", response_model=List[Project])
@@ -68,13 +87,13 @@ async def create_project(body: ProjectCreate, db: aiosqlite.Connection = Depends
 
 
 @app.get("/api/tasks", response_model=List[Task])
-async def list_tasks(db: aiosqlite.Connection = Depends(get_db)):
-    cursor = await db.execute("""
-        SELECT t.*, p.name as project_name
-        FROM tasks t
-        LEFT JOIN projects p ON p.id = t.project_id
-        ORDER BY t.created_at DESC
-    """)
+async def list_tasks(status: Optional[str] = None, db: aiosqlite.Connection = Depends(get_db)):
+    if status:
+        cursor = await db.execute(
+            TASK_SELECT + " WHERE t.status = ? ORDER BY t.created_at ASC", (status,)
+        )
+    else:
+        cursor = await db.execute(TASK_SELECT + " ORDER BY t.created_at DESC")
     rows = await cursor.fetchall()
     return [Task(**dict(row)) for row in rows]
 
@@ -87,9 +106,33 @@ async def create_task(body: TaskCreate, db: aiosqlite.Connection = Depends(get_d
     )
     await db.commit()
     row_cursor = await db.execute(
-        "SELECT t.*, p.name as project_name FROM tasks t LEFT JOIN projects p ON p.id = t.project_id WHERE t.id = ?",
-        (cursor.lastrowid,),
+        TASK_SELECT + " WHERE t.id = ?", (cursor.lastrowid,)
     )
+    row = await row_cursor.fetchone()
+    return Task(**dict(row))
+
+
+@app.post("/api/tasks/{task_id}/claim", response_model=Task)
+async def claim_task(task_id: int, body: TaskClaim, db: aiosqlite.Connection = Depends(get_db)):
+    """Atomically claim a pending task. Returns 409 if already claimed."""
+    row = await (await db.execute(
+        "SELECT status FROM tasks WHERE id = ?", (task_id,)
+    )).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if row["status"] != "pending":
+        raise HTTPException(status_code=409, detail=f"Task already {row['status']}")
+
+    await db.execute(
+        "UPDATE tasks SET status='in_progress', session_id=?, agent_type=?, updated_at=datetime('now') WHERE id = ? AND status='pending'",
+        (body.session_id, body.agent_type, task_id),
+    )
+    await db.execute(
+        "INSERT INTO task_events (task_id, from_status, to_status, actor, session_id, note) VALUES (?, ?, ?, ?, ?, ?)",
+        (task_id, "pending", "in_progress", body.agent_type, body.session_id, f"Claimed by {body.agent_type}"),
+    )
+    await db.commit()
+    row_cursor = await db.execute(TASK_SELECT + " WHERE t.id = ?", (task_id,))
     row = await row_cursor.fetchone()
     return Task(**dict(row))
 
@@ -99,6 +142,8 @@ async def update_task(task_id: int, body: TaskUpdate, db: aiosqlite.Connection =
     check = await (await db.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))).fetchone()
     if not check:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    prev = await (await db.execute("SELECT status, agent_type, session_id FROM tasks WHERE id = ?", (task_id,))).fetchone()
 
     fields = {k: v for k, v in body.model_dump().items() if v is not None}
     if not fields:
@@ -110,14 +155,87 @@ async def update_task(task_id: int, body: TaskUpdate, db: aiosqlite.Connection =
         f"UPDATE tasks SET {set_clause}, updated_at = datetime('now') WHERE id = ?",
         values,
     )
+
+    # Record event when status changes
+    if "status" in fields and fields["status"] != prev["status"]:
+        actor = fields.get("agent_type") or prev["agent_type"]
+        session = fields.get("session_id") or prev["session_id"]
+        await db.execute(
+            "INSERT INTO task_events (task_id, from_status, to_status, actor, session_id) VALUES (?, ?, ?, ?, ?)",
+            (task_id, prev["status"], fields["status"], actor, session),
+        )
+
     await db.commit()
 
-    row_cursor = await db.execute(
-        "SELECT t.*, p.name as project_name FROM tasks t LEFT JOIN projects p ON p.id = t.project_id WHERE t.id = ?",
-        (task_id,),
-    )
+    row_cursor = await db.execute(TASK_SELECT + " WHERE t.id = ?", (task_id,))
     row = await row_cursor.fetchone()
     return Task(**dict(row))
+
+
+@app.get("/api/agents/{agent_id}/stats")
+async def agent_stats(agent_id: str, db: aiosqlite.Connection = Depends(get_db)):
+    agent = next((a for a in AGENTS if a.id == agent_id), None)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    cursor = await db.execute(
+        "SELECT status, COUNT(*) as cnt FROM tasks WHERE assigned_agent = ? GROUP BY status",
+        (agent_id,),
+    )
+    counts = {row["status"]: row["cnt"] for row in await cursor.fetchall()}
+
+    recent_cursor = await db.execute(
+        TASK_SELECT + " WHERE t.assigned_agent = ? ORDER BY t.updated_at DESC LIMIT 10",
+        (agent_id,),
+    )
+    recent_tasks = [Task(**dict(row)) for row in await recent_cursor.fetchall()]
+
+    return {
+        "completed": counts.get("done", 0),
+        "in_progress": counts.get("in_progress", 0),
+        "pending": counts.get("pending", 0),
+        "recent_tasks": recent_tasks,
+    }
+
+
+@app.get("/api/tasks/{task_id}/comments", response_model=List[Comment])
+async def list_comments(task_id: int, db: aiosqlite.Connection = Depends(get_db)):
+    check = await (await db.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))).fetchone()
+    if not check:
+        raise HTTPException(status_code=404, detail="Task not found")
+    cursor = await db.execute(
+        "SELECT * FROM comments WHERE task_id = ? ORDER BY created_at ASC", (task_id,)
+    )
+    rows = await cursor.fetchall()
+    return [Comment(**dict(row)) for row in rows]
+
+
+@app.post("/api/tasks/{task_id}/comments", response_model=Comment, status_code=201)
+async def create_comment(task_id: int, body: CommentCreate, db: aiosqlite.Connection = Depends(get_db)):
+    check = await (await db.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))).fetchone()
+    if not check:
+        raise HTTPException(status_code=404, detail="Task not found")
+    cursor = await db.execute(
+        "INSERT INTO comments (task_id, author, body) VALUES (?, ?, ?)",
+        (task_id, body.author, body.body),
+    )
+    await db.commit()
+    row = await (await db.execute(
+        "SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,)
+    )).fetchone()
+    return Comment(**dict(row))
+
+
+@app.get("/api/tasks/{task_id}/events", response_model=List[TaskEvent])
+async def list_events(task_id: int, db: aiosqlite.Connection = Depends(get_db)):
+    check = await (await db.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))).fetchone()
+    if not check:
+        raise HTTPException(status_code=404, detail="Task not found")
+    cursor = await db.execute(
+        "SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at ASC", (task_id,)
+    )
+    rows = await cursor.fetchall()
+    return [TaskEvent(**dict(row)) for row in rows]
 
 
 @app.get("/health")

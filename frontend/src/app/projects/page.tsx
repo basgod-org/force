@@ -28,9 +28,13 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.projects.list().then(setProjects).finally(() => setLoading(false));
+    api.projects.list()
+      .then(setProjects)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
   }, []);
 
   return (

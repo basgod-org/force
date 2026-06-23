@@ -30,15 +30,15 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  /* zinc-950 background */
-  --background: oklch(0.09 0.002 256);
+  --radius: 0.75rem;
+  /* deep navy background */
+  --background: oklch(0.07 0.018 260);
   --foreground: oklch(0.96 0.002 256);
-  /* zinc-900 cards */
-  --card: oklch(0.14 0.002 256);
+  /* glass cards */
+  --card: oklch(0.11 0.012 260 / 0.7);
   --card-foreground: oklch(0.96 0.002 256);
   /* popover same as card */
-  --popover: oklch(0.14 0.002 256);
+  --popover: oklch(0.14 0.012 260);
   --popover-foreground: oklch(0.96 0.002 256);
   /* indigo-600 primary */
   --primary: oklch(0.563 0.208 264.052);
@@ -66,8 +66,20 @@
 }
 
 body {
-  background-color: var(--background);
+  background-color: #060b18;
   color: var(--foreground);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 5% 0%, rgba(99, 60, 220, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 95% 100%, rgba(30, 100, 200, 0.12) 0%, transparent 55%),
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+  background-size: auto, auto, 28px 28px;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 50%, #34d399 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .text-balance {

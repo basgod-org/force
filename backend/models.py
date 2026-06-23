@@ -26,6 +26,8 @@ class Task(BaseModel):
     project_name: Optional[str] = None
     assigned_agent: Optional[str] = None
     status: str  # pending | in_progress | done
+    session_id: Optional[str] = None
+    agent_type: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -42,6 +44,13 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     assigned_agent: Optional[str] = None
+    session_id: Optional[str] = None
+    agent_type: Optional[str] = None
+
+
+class TaskClaim(BaseModel):
+    session_id: str
+    agent_type: str
 
 
 class Agent(BaseModel):
@@ -51,3 +60,27 @@ class Agent(BaseModel):
     model: str
     status: str  # idle | working
     current_task: Optional[str] = None
+
+
+class Comment(BaseModel):
+    id: int
+    task_id: int
+    author: str
+    body: str
+    created_at: str
+
+
+class CommentCreate(BaseModel):
+    author: str
+    body: str
+
+
+class TaskEvent(BaseModel):
+    id: int
+    task_id: int
+    from_status: Optional[str] = None
+    to_status: str
+    actor: Optional[str] = None
+    session_id: Optional[str] = None
+    note: Optional[str] = None
+    created_at: str

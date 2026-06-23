@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8090";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export interface Agent {
   id: string;
@@ -25,6 +25,8 @@ export interface Task {
   project_id?: number;
   project_name?: string;
   assigned_agent?: string;
+  agent_type?: string;
+  session_id?: string;
   status: "pending" | "in_progress" | "done";
   created_at: string;
   updated_at: string;
@@ -35,6 +37,32 @@ export interface TaskCreate {
   description?: string;
   project_id?: number;
   assigned_agent?: string;
+}
+
+export interface Comment {
+  id: number;
+  task_id: number;
+  author: string;
+  body: string;
+  created_at: string;
+}
+
+export interface TaskEvent {
+  id: number;
+  task_id: number;
+  from_status?: string;
+  to_status: string;
+  actor?: string;
+  session_id?: string;
+  note?: string;
+  created_at: string;
+}
+
+export interface AgentStats {
+  completed: number;
+  in_progress: number;
+  pending: number;
+  recent_tasks: Task[];
 }
 
 export interface ProjectCreate {
@@ -55,6 +83,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   agents: {
     list: () => req<Agent[]>("/api/agents"),
+    stats: (id: string) => req<AgentStats>(`/api/agents/${id}/stats`),
   },
   projects: {
     list: () => req<Project[]>("/api/projects"),
@@ -67,5 +96,16 @@ export const api = {
       req<Task>("/api/tasks", { method: "POST", body: JSON.stringify(body) }),
     update: (id: number, body: Partial<Task>) =>
       req<Task>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    comments: {
+      list: (taskId: number) => req<Comment[]>(`/api/tasks/${taskId}/comments`),
+      create: (taskId: number, body: { author: string; body: string }) =>
+        req<Comment>(`/api/tasks/${taskId}/comments`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+    },
+    events: {
+      list: (taskId: number) => req<TaskEvent[]>(`/api/tasks/${taskId}/events`),
+    },
   },
 };

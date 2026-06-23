@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TaskDrawer } from "@/components/TaskDrawer";
 import { api, Task, Project, Agent } from "@/lib/api";
 
 const COLUMNS: { id: Task["status"]; label: string }[] = [
@@ -41,6 +42,7 @@ export default function TasksPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const load = async () => {
     const [t, p, a] = await Promise.all([api.tasks.list(), api.projects.list(), api.agents.list()]);
@@ -52,7 +54,8 @@ export default function TasksPage() {
 
   useEffect(() => { load(); }, []);
 
-  const advance = async (task: Task) => {
+  const advance = async (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
     const next = STATUS_NEXT[task.status];
     if (!next) return;
     const updated = await api.tasks.update(task.id, { status: next });
@@ -100,7 +103,12 @@ export default function TasksPage() {
               </div>
               <div className="flex flex-col gap-2">
                 {byStatus(col.id).map((task) => (
-                  <TaskCard key={task.id} task={task} onAdvance={() => advance(task)} />
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onAdvance={(e) => advance(task, e)}
+                    onClick={() => setSelectedTask(task)}
+                  />
                 ))}
                 {byStatus(col.id).length === 0 && (
                   <div className="border border-dashed border-border rounded-md p-4 text-xs text-muted-foreground text-center">
@@ -112,14 +120,24 @@ export default function TasksPage() {
           ))}
         </div>
       )}
+
+      <TaskDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />
     </div>
   );
 }
 
-function TaskCard({ task, onAdvance }: { task: Task; onAdvance: () => void }) {
+function TaskCard({
+  task,
+  onAdvance,
+  onClick,
+}: {
+  task: Task;
+  onAdvance: (e: React.MouseEvent) => void;
+  onClick: () => void;
+}) {
   const next = STATUS_NEXT[task.status];
   return (
-    <Card className="text-sm">
+    <Card className="text-sm cursor-pointer hover:ring-1 hover:ring-indigo-500/40 transition-all" onClick={onClick}>
       <CardHeader className="pb-2 pt-4 px-4">
         <CardTitle className="text-sm font-medium leading-snug">{task.title}</CardTitle>
       </CardHeader>

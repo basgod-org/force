@@ -33,10 +33,39 @@ async def init_db():
                 project_id INTEGER REFERENCES projects(id),
                 assigned_agent TEXT,
                 status TEXT DEFAULT 'pending' CHECK(status IN ('pending','in_progress','done')),
+                session_id TEXT,
+                agent_type TEXT,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL REFERENCES tasks(id),
+                author TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS task_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL REFERENCES tasks(id),
+                from_status TEXT,
+                to_status TEXT NOT NULL,
+                actor TEXT,
+                session_id TEXT,
+                note TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        # Migrate existing DB: add columns if missing
+        for col, typedef in [("session_id", "TEXT"), ("agent_type", "TEXT")]:
+            try:
+                await db.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}")
+            except Exception:
+                pass
         await db.commit()
         await _seed(db)
 
