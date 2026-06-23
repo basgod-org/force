@@ -206,13 +206,13 @@ async def agent_stats(agent_id: str, db: aiosqlite.Connection = Depends(get_db))
         raise HTTPException(status_code=404, detail="Agent not found")
 
     cursor = await db.execute(
-        "SELECT status, COUNT(*) as cnt FROM tasks WHERE assigned_agent = ? GROUP BY status",
+        "SELECT status, COUNT(*) as cnt FROM tasks WHERE COALESCE(assigned_agent, agent_type) = ? GROUP BY status",
         (agent_id,),
     )
     counts = {row["status"]: row["cnt"] for row in await cursor.fetchall()}
 
     recent_cursor = await db.execute(
-        TASK_SELECT + " WHERE t.assigned_agent = ? ORDER BY t.updated_at DESC LIMIT 10",
+        TASK_SELECT + " WHERE COALESCE(t.assigned_agent, t.agent_type) = ? ORDER BY t.updated_at DESC LIMIT 10",
         (agent_id,),
     )
     recent_tasks = [Task(**dict(row)) for row in await recent_cursor.fetchall()]
