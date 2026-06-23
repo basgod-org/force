@@ -82,7 +82,22 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export interface RecentComment {
+  id: number;
+  task_id: number;
+  task_title: string;
+  author: string;
+  body: string;
+  created_at: string;
+}
+
 export const api = {
+  comments: {
+    recent: (sinceId?: number) =>
+      req<RecentComment[]>(
+        sinceId != null ? `/api/comments/recent?since_id=${sinceId}` : `/api/comments/recent`
+      ),
+  },
   agents: {
     list: () => req<Agent[]>("/api/agents"),
     stats: (id: string) => req<AgentStats>(`/api/agents/${id}/stats`),

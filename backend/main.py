@@ -247,6 +247,40 @@ async def agent_stats(agent_id: str, db: aiosqlite.Connection = Depends(get_db))
     }
 
 
+@app.get("/api/comments/recent")
+async def recent_comments(since_id: Optional[int] = None, db: aiosqlite.Connection = Depends(get_db)):
+    """Get recent agent comments for notifications. Excludes user/agent-request entries."""
+    if since_id is not None:
+        cursor = await db.execute(
+            """SELECT c.id, c.task_id, t.title as task_title, c.author, c.body, c.created_at
+               FROM comments c
+               JOIN tasks t ON t.id = c.task_id
+               WHERE c.id > ? AND c.author NOT IN ('user', 'agent-request')
+               ORDER BY c.id DESC LIMIT 20""",
+            (since_id,),
+        )
+    else:
+        cursor = await db.execute(
+            """SELECT c.id, c.task_id, t.title as task_title, c.author, c.body, c.created_at
+               FROM comments c
+               JOIN tasks t ON t.id = c.task_id
+               WHERE c.author NOT IN ('user', 'agent-request')
+               ORDER BY c.id DESC LIMIT 20"""
+        )
+    rows = await cursor.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "task_id": r["task_id"],
+            "task_title": r["task_title"],
+            "author": r["author"],
+            "body": r["body"],
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
+
+
 @app.get("/api/tasks/{task_id}/comments", response_model=List[Comment])
 async def list_comments(task_id: int, db: aiosqlite.Connection = Depends(get_db)):
     check = await (await db.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))).fetchone()

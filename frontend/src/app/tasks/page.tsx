@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,12 +38,22 @@ const STATUS_NEXT: Record<Task["status"], Task["status"] | null> = {
 };
 
 export default function TasksPage() {
+  return (
+    <Suspense>
+      <TasksPageContent />
+    </Suspense>
+  );
+}
+
+function TasksPageContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const load = async () => {
     const [t, p, a] = await Promise.all([api.tasks.list(), api.projects.list(), api.agents.list()]);
@@ -53,6 +64,14 @@ export default function TasksPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Auto-open task drawer when ?task=<id> is in the URL (from notification click)
+  useEffect(() => {
+    const taskId = searchParams.get("task");
+    if (!taskId || !tasks.length) return;
+    const found = tasks.find((t) => t.id === parseInt(taskId, 10));
+    if (found) setSelectedTask(found);
+  }, [tasks, searchParams]);
 
   const advance = async (task: Task, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -121,7 +140,15 @@ export default function TasksPage() {
         </div>
       )}
 
-      <TaskDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />
+      <TaskDrawer
+        task={selectedTask}
+        onClose={() => {
+          setSelectedTask(null);
+          if (searchParams.get("task")) {
+            router.replace("/tasks", { scroll: false });
+          }
+        }}
+      />
     </div>
   );
 }
