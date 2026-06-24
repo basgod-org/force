@@ -26,8 +26,11 @@ OPENCLAW_HOOK = "http://127.0.0.1:18789/hooks/agent"
 OPENCLAW_TOKEN = "force-hook-x9k2m7p4q1"
 
 
-def _dispatch_to_hook(agent_id: str, message: str, name: str = "Force Chat") -> bool:
-    payload = json.dumps({"message": message, "name": name, "agentId": agent_id}).encode()
+def _dispatch_to_hook(agent_id: str, message: str, name: str = "Force Chat", session_key: Optional[str] = None) -> bool:
+    body: dict = {"message": message, "name": name, "agentId": agent_id}
+    if session_key:
+        body["sessionKey"] = session_key
+    payload = json.dumps(body).encode()
     req = urllib.request.Request(
         OPENCLAW_HOOK,
         data=payload,
@@ -384,8 +387,13 @@ async def start_chat(agent_id: str, body: ChatCreate, db: aiosqlite.Connection =
     )
     await db.commit()
 
-    prompt = _build_chat_prompt(agent_id, agent.name, task_id, [{"author": "user", "body": body.message}])
-    asyncio.get_event_loop().run_in_executor(None, lambda: _dispatch_to_hook(agent_id, prompt, f"Chat #{task_id}"))
+    # Session key ties this chat thread to a persistent OpenClaw session.
+    # The agent accumulates full conversation history across follow-up messages.
+    session_key = f"{agent_id}:chat:{task_id}"
+    prompt = _build_chat_prompt(agent_id, agent.name, task_id, body.message)
+    asyncio.get_event_loop().run_in_executor(
+        None, lambda: _dispatch_to_hook(agent_id, prompt, f"Chat #{task_id}", session_key)
+    )
 
     row = await (await db.execute(TASK_SELECT + " WHERE t.id = ?", (task_id,))).fetchone()
     return Task(**dict(row))
@@ -406,27 +414,22 @@ async def reply_chat(agent_id: str, task_id: int, body: ChatReply, db: aiosqlite
 
     comment_row = await (await db.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,))).fetchone()
 
-    all_comments = await (await db.execute(
-        "SELECT author, body FROM comments WHERE task_id = ? ORDER BY created_at ASC", (task_id,)
-    )).fetchall()
+    # Same session key as start_chat — OpenClaw already has the full history.
+    session_key = f"{agent_id}:chat:{task_id}"
     agent = next((a for a in AGENTS if a.id == agent_id), None)
-    prompt = _build_chat_prompt(agent_id, agent.name if agent else agent_id, task_id, [dict(r) for r in all_comments])
-    asyncio.get_event_loop().run_in_executor(None, lambda: _dispatch_to_hook(agent_id, prompt, f"Chat #{task_id}"))
+    asyncio.get_event_loop().run_in_executor(
+        None, lambda: _dispatch_to_hook(agent_id, body.message, f"Chat #{task_id}", session_key)
+    )
 
     return Comment(**dict(comment_row))
 
 
-def _build_chat_prompt(agent_id: str, agent_name: str, task_id: int, messages: list) -> str:
-    history = "\n".join(
-        f"{'You' if m['author'] not in ('user',) else 'User'}: {m['body']}"
-        for m in messages
-    )
-    return f"""You are {agent_name}, a live AI assistant. A user is chatting with you directly in Force.
+def _build_chat_prompt(agent_id: str, agent_name: str, task_id: int, message: str) -> str:
+    return f"""You are {agent_name}, a live AI assistant. A user is chatting with you directly in Force (an AI team management app).
 
-## Conversation so far:
-{history}
+User: {message}
 
-Respond to the user's latest message naturally and conversationally. Be helpful and concise.
+Respond naturally and conversationally. Be helpful and concise.
 
 When done, post your reply with:
 curl -s -X POST {FORCE_API}/tasks/{task_id}/comments \\
@@ -434,9 +437,9 @@ curl -s -X POST {FORCE_API}/tasks/{task_id}/comments \\
   -d '{{"author": "{agent_id}", "body": "YOUR_REPLY_HERE"}}'
 
 Rules:
-- This is direct chat — do NOT do task management or mention Force workflows.
-- Do NOT message Pruthvi on Telegram or WhatsApp.
-- Keep your reply focused on what the user asked.
+- This is direct chat — be conversational, not task-management-y.
+- Do NOT message anyone externally (Telegram, WhatsApp, etc).
+- Keep replies focused. You are a persistent agent — the conversation history is in your session context.
 """
 
 
