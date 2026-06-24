@@ -27,6 +27,15 @@ OPENCLAW_HOOK = "http://127.0.0.1:18789/hooks/agent"
 OPENCLAW_TOKEN = "force-hook-x9k2m7p4q1"
 
 
+def _run_claude_in_background(prompt: str, cwd: str, env: dict) -> None:
+    """Spawn claude subprocess; opens and closes the log file within the call."""
+    with open(DISPATCHER_LOG, "a") as fh:
+        subprocess.Popen(
+            [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
+            stdout=fh, stderr=fh, cwd=cwd, env=env,
+        )
+
+
 def _dispatch_to_hook(agent_id: str, message: str, name: str = "Force Chat", session_key: Optional[str] = None) -> bool:
     body: dict = {"message": message, "name": name, "agentId": agent_id}
     if session_key:
@@ -65,9 +74,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Force API", version="1.0.0", lifespan=lifespan)
 
+_cors_origins = ["https://teams.basgod.com"]
+if os.environ.get("FORCE_DEV"):
+    _cors_origins.append("http://localhost:3000")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://teams.basgod.com"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -176,10 +189,12 @@ async def claim_task(task_id: int, body: TaskClaim, db: aiosqlite.Connection = D
     if row["status"] != "pending":
         raise HTTPException(status_code=409, detail=f"Task already {row['status']}")
 
-    await db.execute(
+    update_cursor = await db.execute(
         "UPDATE tasks SET status='in_progress', session_id=?, agent_type=?, updated_at=datetime('now') WHERE id = ? AND status='pending'",
         (body.session_id, body.agent_type, task_id),
     )
+    if update_cursor.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Task already claimed by another dispatcher")
     await db.execute(
         "INSERT INTO task_events (task_id, from_status, to_status, actor, session_id, note) VALUES (?, ?, ?, ?, ?, ?)",
         (task_id, "pending", "in_progress", body.agent_type, body.session_id, f"Claimed by {body.agent_type}"),
@@ -223,6 +238,17 @@ async def update_task(task_id: int, body: TaskUpdate, db: aiosqlite.Connection =
     row_cursor = await db.execute(TASK_SELECT + " WHERE t.id = ?", (task_id,))
     row = await row_cursor.fetchone()
     return Task(**dict(row))
+
+
+@app.delete("/api/tasks/{task_id}", status_code=204)
+async def delete_task(task_id: int, db: aiosqlite.Connection = Depends(get_db)):
+    check = await (await db.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))).fetchone()
+    if not check:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await db.execute("DELETE FROM comments WHERE task_id = ?", (task_id,))
+    await db.execute("DELETE FROM task_events WHERE task_id = ?", (task_id,))
+    await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    await db.commit()
 
 
 @app.get("/api/agents/{agent_id}/stats")
@@ -332,18 +358,10 @@ async def create_comment(task_id: int, body: CommentCreate, db: aiosqlite.Connec
             f"- All output goes to Force task comments only.\n"
             f"- Keep your reply focused and actionable."
         )
-        log_fh = open(DISPATCHER_LOG, "a")
         env = os.environ.copy()
         env["PATH"] = f"/home/pruthvi/.local/bin:{env.get('PATH', '/usr/bin:/bin')}"
-        asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: subprocess.Popen(
-                [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
-                stdout=log_fh,
-                stderr=log_fh,
-                cwd="/home/pruthvi/Projects",
-                env=env,
-            )
+        asyncio.get_running_loop().run_in_executor(
+            None, lambda: _run_claude_in_background(prompt, "/home/pruthvi/Projects", env)
         )
 
     return comment
@@ -392,7 +410,7 @@ async def start_chat(agent_id: str, body: ChatCreate, db: aiosqlite.Connection =
     # The agent accumulates full conversation history across follow-up messages.
     session_key = f"{agent_id}:chat:{task_id}"
     prompt = _build_chat_prompt(agent_id, agent.name, task_id, body.message)
-    asyncio.get_event_loop().run_in_executor(
+    asyncio.get_running_loop().run_in_executor(
         None, lambda: _dispatch_to_hook(agent_id, prompt, f"Chat #{task_id}", session_key)
     )
 
@@ -418,7 +436,7 @@ async def reply_chat(agent_id: str, task_id: int, body: ChatReply, db: aiosqlite
     # Same session key as start_chat — OpenClaw already has the full history.
     session_key = f"{agent_id}:chat:{task_id}"
     agent = next((a for a in AGENTS if a.id == agent_id), None)
-    asyncio.get_event_loop().run_in_executor(
+    asyncio.get_running_loop().run_in_executor(
         None, lambda: _dispatch_to_hook(agent_id, body.message, f"Chat #{task_id}", session_key)
     )
 
@@ -463,7 +481,7 @@ async def direct_chat_start(agent_id: str, body: DirectChatSend, db: aiosqlite.C
 
     session_key = f"{agent_id}:direct:{session_id}"
     prompt = _build_direct_chat_prompt(agent_id, agent.name, session_id, body.message)
-    asyncio.get_event_loop().run_in_executor(
+    asyncio.get_running_loop().run_in_executor(
         None, lambda: _dispatch_to_hook(agent_id, prompt, f"Direct chat {session_id}", session_key)
     )
 
@@ -501,7 +519,7 @@ async def direct_chat_send(agent_id: str, session_id: str, body: DirectChatSend,
     )).fetchone()
 
     session_key = f"{agent_id}:direct:{session_id}"
-    asyncio.get_event_loop().run_in_executor(
+    asyncio.get_running_loop().run_in_executor(
         None, lambda: _dispatch_to_hook(agent_id, body.message, f"Direct chat {session_id}", session_key)
     )
 

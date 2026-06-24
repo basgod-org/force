@@ -47,6 +47,8 @@ def reset_stuck_tasks():
             updated = datetime.fromisoformat(task["updated_at"]).replace(tzinfo=timezone.utc)
         except Exception:
             continue
+        if task.get("is_chat"):
+            continue
         if updated < cutoff:
             task_id = task["id"]
             actor = task.get("agent_type") or task.get("assigned_agent") or "unknown"
@@ -203,17 +205,17 @@ def dispatch_task(task):
         pass
 
     # Fallback: spawn claude directly if hook isn't available
-    log_fh = open(DISPATCHER_LOG, "a")
     env = os.environ.copy()
     env["PATH"] = f"/home/pruthvi/.local/bin:{env.get('PATH', '/usr/bin:/bin')}"
     cwd = repo_path or "/home/pruthvi/Projects"
-    subprocess.Popen(
-        [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
-        stdout=log_fh,
-        stderr=log_fh,
-        cwd=cwd,
-        env=env,
-    )
+    with open(DISPATCHER_LOG, "a") as log_fh:
+        subprocess.Popen(
+            [CLAUDE_BIN, "--dangerously-skip-permissions", "--print", prompt],
+            stdout=log_fh,
+            stderr=log_fh,
+            cwd=cwd,
+            env=env,
+        )
 
 
 def main():
