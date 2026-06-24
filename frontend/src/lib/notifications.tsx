@@ -39,6 +39,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const lastIdRef = useRef<number | null>(null);
   const bootstrappedRef = useRef(false);
+  // Items that arrived while the tab was hidden; flushed as toasts on refocus.
+  const pendingToastsRef = useRef<RecentComment[]>([]);
   const router = useRouter();
 
   const openTask = useCallback(
@@ -58,16 +60,35 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }, []);
 
+  const showToast = useCallback(
+    (item: RecentComment) => {
+      const preview =
+        item.body.length > 120
+          ? item.body.slice(0, 120).trimEnd() + "…"
+          : item.body;
+      toast(`@${item.author} replied`, {
+        description: preview,
+        action: {
+          label: "View Task",
+          onClick: () => openTask(item.task_id),
+        },
+        duration: 8000,
+      });
+    },
+    [openTask]
+  );
+
   const poll = useCallback(
-    async (showToasts: boolean) => {
+    async (isFirstEverVisit: boolean) => {
       try {
         const items = await api.comments.recent(lastIdRef.current ?? undefined);
         if (!items.length) return;
 
         // Items come newest-first; find any that are genuinely new
-        const newItems = lastIdRef.current != null
-          ? items.filter((i) => i.id > lastIdRef.current!)
-          : items;
+        const newItems =
+          lastIdRef.current != null
+            ? items.filter((i) => i.id > lastIdRef.current!)
+            : items;
 
         const maxId = Math.max(...items.map((i) => i.id));
         lastIdRef.current = maxId;
@@ -75,9 +96,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
         if (!newItems.length) return;
 
+        // On the very first visit ever (no stored baseline) we silently absorb
+        // history: mark read, no toasts. On every other poll — including page
+        // reloads where a baseline already existed — fresh comments are unread
+        // and toast (or queue if the tab is hidden).
         const mapped: Notification[] = newItems.map((item) => ({
           ...item,
-          read: !showToasts,
+          read: isFirstEverVisit,
         }));
 
         setNotifications((prev) => {
@@ -86,27 +111,20 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           return [...fresh, ...prev].slice(0, MAX_NOTIFICATIONS);
         });
 
-        if (showToasts && document.visibilityState === "visible") {
-          newItems.forEach((item) => {
-            const preview =
-              item.body.length > 120
-                ? item.body.slice(0, 120).trimEnd() + "…"
-                : item.body;
-            toast(`@${item.author} replied`, {
-              description: preview,
-              action: {
-                label: "View Task",
-                onClick: () => openTask(item.task_id),
-              },
-              duration: 8000,
-            });
-          });
+        if (isFirstEverVisit) return;
+
+        // Oldest-first so the newest toast lands on top of the stack.
+        const ordered = [...newItems].sort((a, b) => a.id - b.id);
+        if (document.visibilityState === "visible") {
+          ordered.forEach(showToast);
+        } else {
+          pendingToastsRef.current.push(...ordered);
         }
       } catch {
         // silently ignore poll errors
       }
     },
-    [openTask]
+    [showToast]
   );
 
   useEffect(() => {
@@ -114,21 +132,32 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     bootstrappedRef.current = true;
 
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const isFirstEverVisit = stored == null;
+    if (stored != null) {
       lastIdRef.current = parseInt(stored, 10);
     }
 
     let interval: ReturnType<typeof setInterval>;
 
-    // Bootstrap without toasts, then start live polling
-    poll(false).then(() => {
-      interval = setInterval(() => poll(true), 10000);
+    // First poll only suppresses toasts if there was no prior baseline at all.
+    poll(isFirstEverVisit).then(() => {
+      interval = setInterval(() => poll(false), 10000);
     });
+
+    // When the tab regains focus, fire any toasts that piled up while hidden.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const queued = pendingToastsRef.current;
+      pendingToastsRef.current = [];
+      queued.forEach(showToast);
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [poll]);
+  }, [poll, showToast]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

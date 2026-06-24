@@ -60,6 +60,19 @@ async def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS agent_direct_chats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                author TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_direct_chats ON agent_direct_chats(agent_id, session_id)"
+        )
         # Migrate existing DB: add columns if missing
         for col, typedef in [("session_id", "TEXT"), ("agent_type", "TEXT"), ("is_chat", "INTEGER DEFAULT 0")]:
             try:

@@ -20,6 +20,7 @@ from models import (
     Task, TaskCreate, TaskUpdate, TaskClaim,
     Comment, CommentCreate, TaskEvent,
     ChatCreate, ChatReply,
+    DirectChatMessage, DirectChatSend, DirectChatAgentReply,
 )
 
 OPENCLAW_HOOK = "http://127.0.0.1:18789/hooks/agent"
@@ -440,6 +441,103 @@ Rules:
 - This is direct chat — be conversational, not task-management-y.
 - Do NOT message anyone externally (Telegram, WhatsApp, etc).
 - Keep replies focused. You are a persistent agent — the conversation history is in your session context.
+"""
+
+
+@app.post("/api/agents/{agent_id}/direct", response_model=List[DirectChatMessage], status_code=201)
+async def direct_chat_start(agent_id: str, body: DirectChatSend, db: aiosqlite.Connection = Depends(get_db)):
+    """Start a new direct chat session with an agent."""
+    agent = next((a for a in AGENTS if a.id == agent_id), None)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    import time
+    session_id = f"{agent_id}-{int(time.time() * 1000)}"
+
+    cursor = await db.execute(
+        "INSERT INTO agent_direct_chats (agent_id, session_id, author, body) VALUES (?, ?, 'user', ?)",
+        (agent_id, session_id, body.message),
+    )
+    await db.commit()
+    msg_id = cursor.lastrowid
+
+    session_key = f"{agent_id}:direct:{session_id}"
+    prompt = _build_direct_chat_prompt(agent_id, agent.name, session_id, body.message)
+    asyncio.get_event_loop().run_in_executor(
+        None, lambda: _dispatch_to_hook(agent_id, prompt, f"Direct chat {session_id}", session_key)
+    )
+
+    row = await (await db.execute(
+        "SELECT * FROM agent_direct_chats WHERE id = ?", (msg_id,)
+    )).fetchone()
+    return [DirectChatMessage(**dict(row))]
+
+
+@app.get("/api/agents/{agent_id}/direct/{session_id}", response_model=List[DirectChatMessage])
+async def direct_chat_messages(agent_id: str, session_id: str, db: aiosqlite.Connection = Depends(get_db)):
+    cursor = await db.execute(
+        "SELECT * FROM agent_direct_chats WHERE agent_id = ? AND session_id = ? ORDER BY created_at ASC",
+        (agent_id, session_id),
+    )
+    rows = await cursor.fetchall()
+    return [DirectChatMessage(**dict(r)) for r in rows]
+
+
+@app.post("/api/agents/{agent_id}/direct/{session_id}", response_model=DirectChatMessage, status_code=201)
+async def direct_chat_send(agent_id: str, session_id: str, body: DirectChatSend, db: aiosqlite.Connection = Depends(get_db)):
+    """Send a follow-up message in an existing direct chat session."""
+    agent = next((a for a in AGENTS if a.id == agent_id), None)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    cursor = await db.execute(
+        "INSERT INTO agent_direct_chats (agent_id, session_id, author, body) VALUES (?, ?, 'user', ?)",
+        (agent_id, session_id, body.message),
+    )
+    await db.commit()
+
+    row = await (await db.execute(
+        "SELECT * FROM agent_direct_chats WHERE id = ?", (cursor.lastrowid,)
+    )).fetchone()
+
+    session_key = f"{agent_id}:direct:{session_id}"
+    asyncio.get_event_loop().run_in_executor(
+        None, lambda: _dispatch_to_hook(agent_id, body.message, f"Direct chat {session_id}", session_key)
+    )
+
+    return DirectChatMessage(**dict(row))
+
+
+@app.post("/api/agents/{agent_id}/direct/{session_id}/reply", response_model=DirectChatMessage, status_code=201)
+async def direct_chat_agent_reply(agent_id: str, session_id: str, body: DirectChatAgentReply, db: aiosqlite.Connection = Depends(get_db)):
+    """Agent posts its reply here. Called by the agent via curl."""
+    cursor = await db.execute(
+        "INSERT INTO agent_direct_chats (agent_id, session_id, author, body) VALUES (?, ?, ?, ?)",
+        (agent_id, session_id, body.author, body.body),
+    )
+    await db.commit()
+    row = await (await db.execute(
+        "SELECT * FROM agent_direct_chats WHERE id = ?", (cursor.lastrowid,)
+    )).fetchone()
+    return DirectChatMessage(**dict(row))
+
+
+def _build_direct_chat_prompt(agent_id: str, agent_name: str, session_id: str, message: str) -> str:
+    return f"""You are {agent_name}, a live AI assistant. A user is chatting with you directly.
+
+User: {message}
+
+Respond naturally and conversationally. Be helpful and concise.
+
+Post your reply with:
+curl -s -X POST {FORCE_API}/agents/{agent_id}/direct/{session_id}/reply \\
+  -H "Content-Type: application/json" \\
+  -d '{{"author": "{agent_id}", "body": "YOUR_REPLY_HERE"}}'
+
+Rules:
+- Be conversational and direct. No task-management talk.
+- Do NOT message anyone externally (Telegram, WhatsApp, etc).
+- Your session context holds the full conversation history — no need to replay it.
 """
 
 

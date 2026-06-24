@@ -95,3 +95,21 @@ class TaskEvent(BaseModel):
     session_id: Optional[str] = None
     note: Optional[str] = None
     created_at: str
+
+
+class DirectChatMessage(BaseModel):
+    id: int
+    agent_id: str
+    session_id: str
+    author: str
+    body: str
+    created_at: str
+
+
+class DirectChatSend(BaseModel):
+    message: str
+
+
+class DirectChatAgentReply(BaseModel):
+    author: str
+    body: str

@@ -91,6 +91,15 @@ export interface RecentComment {
   created_at: string;
 }
 
+export interface DirectChatMessage {
+  id: number;
+  agent_id: string;
+  session_id: string;
+  author: string;
+  body: string;
+  created_at: string;
+}
+
 export const api = {
   comments: {
     recent: (sinceId?: number) =>
@@ -101,11 +110,14 @@ export const api = {
   agents: {
     list: () => req<Agent[]>("/api/agents"),
     stats: (id: string) => req<AgentStats>(`/api/agents/${id}/stats`),
-    chats: (id: string) => req<Task[]>(`/api/agents/${id}/chats`),
-    chat: (id: string, message: string) =>
-      req<Task>(`/api/agents/${id}/chat`, { method: "POST", body: JSON.stringify({ message }) }),
-    chatReply: (id: string, taskId: number, message: string) =>
-      req<Comment>(`/api/agents/${id}/chat/${taskId}/reply`, { method: "POST", body: JSON.stringify({ message }) }),
+    direct: {
+      start: (agentId: string, message: string) =>
+        req<DirectChatMessage[]>(`/api/agents/${agentId}/direct`, { method: "POST", body: JSON.stringify({ message }) }),
+      messages: (agentId: string, sessionId: string) =>
+        req<DirectChatMessage[]>(`/api/agents/${agentId}/direct/${sessionId}`),
+      send: (agentId: string, sessionId: string, message: string) =>
+        req<DirectChatMessage>(`/api/agents/${agentId}/direct/${sessionId}`, { method: "POST", body: JSON.stringify({ message }) }),
+    },
   },
   projects: {
     list: () => req<Project[]>("/api/projects"),
