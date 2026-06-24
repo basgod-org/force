@@ -22,8 +22,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { TaskDrawer } from "@/components/TaskDrawer";
 import { api, Task, Project, Agent } from "@/lib/api";
+
+const PAGE_SIZE = 10;
 
 const COLUMNS: { id: Task["status"]; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -52,8 +61,16 @@ function TasksPageContent() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [pages, setPages] = useState<Record<Task["status"], number>>({
+    pending: 1,
+    in_progress: 1,
+    done: 1,
+  });
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  const setPage = (status: Task["status"], page: number) =>
+    setPages((prev) => ({ ...prev, [status]: page }));
 
   const load = async () => {
     const [t, p, a] = await Promise.all([api.tasks.list(), api.projects.list(), api.agents.list()]);
@@ -81,7 +98,19 @@ function TasksPageContent() {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   };
 
-  const byStatus = (status: Task["status"]) => tasks.filter((t) => t.status === status);
+  const allByStatus = (status: Task["status"]) => tasks.filter((t) => t.status === status);
+  const pagedByStatus = (status: Task["status"]) => {
+    const all = allByStatus(status);
+    const pg = pages[status];
+    const total = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+    const current = Math.min(pg, total);
+    return {
+      items: all.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
+      total: all.length,
+      totalPages: total,
+      currentPage: current,
+    };
+  };
 
   return (
     <div className="p-4 sm:p-8">
@@ -114,29 +143,61 @@ function TasksPageContent() {
         <div className="text-muted-foreground text-sm">Loading…</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {COLUMNS.map((col) => (
-            <div key={col.id}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm font-medium">{col.label}</span>
-                <Badge variant="secondary" className="text-xs">{byStatus(col.id).length}</Badge>
-              </div>
-              <div className="flex flex-col gap-2">
-                {byStatus(col.id).map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onAdvance={(e) => advance(task, e)}
-                    onClick={() => setSelectedTask(task)}
-                  />
-                ))}
-                {byStatus(col.id).length === 0 && (
-                  <div className="border border-dashed border-border rounded-md p-4 text-xs text-muted-foreground text-center">
-                    No tasks
+          {COLUMNS.map((col) => {
+            const { items, total, totalPages, currentPage } = pagedByStatus(col.id);
+            return (
+              <div key={col.id}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm font-medium">{col.label}</span>
+                  <Badge variant="secondary" className="text-xs">{total}</Badge>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {items.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onAdvance={(e) => advance(task, e)}
+                      onClick={() => setSelectedTask(task)}
+                    />
+                  ))}
+                  {items.length === 0 && (
+                    <div className="border border-dashed border-border rounded-md p-4 text-xs text-muted-foreground text-center">
+                      No tasks
+                    </div>
+                  )}
+                </div>
+                {totalPages > 1 && (
+                  <div className="mt-3">
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setPage(col.id, currentPage - 1); }}
+                            aria-disabled={currentPage === 1}
+                            className={currentPage === 1 ? "pointer-events-none opacity-40" : ""}
+                          />
+                        </PaginationItem>
+                        <PaginationItem>
+                          <span className="text-xs text-muted-foreground px-2">
+                            {currentPage} / {totalPages}
+                          </span>
+                        </PaginationItem>
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setPage(col.id, currentPage + 1); }}
+                            aria-disabled={currentPage === totalPages}
+                            className={currentPage === totalPages ? "pointer-events-none opacity-40" : ""}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
                   </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
