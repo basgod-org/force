@@ -123,6 +123,8 @@ Analyse the task and complete it to the best of your ability using your tools
 
     return f"""You are the {agent_type} agent ({agent_role}) working on a task in Force, an AI team management system.
 
+You have a persistent session for the **{project}** project — your conversation history for this project carries over between tasks. Check your prior context for relevant background before starting.
+
 ## Task
 - ID: {task_id}
 - Title: {title}
@@ -172,11 +174,17 @@ def dispatch_task(task):
     repo_path = get_repo_path(task)
     prompt = build_prompt(task, agent_type, repo_path)
 
+    # Session key scopes the agent's persistent memory per project.
+    # dev:project:42 and dev:project:7 are separate sessions — no context bleed.
+    project_id = task.get("project_id")
+    session_key = f"{agent_type}:project:{project_id}" if project_id else f"{agent_type}:general"
+
     # Try the OpenClaw hook API first (persistent dedicated agents)
     hook_payload = json.dumps({
         "message": prompt,
         "name": f"Force task #{task_id}",
         "agentId": agent_type,
+        "sessionKey": session_key,
     }).encode()
     hook_req = urllib.request.Request(
         OPENCLAW_HOOK,
