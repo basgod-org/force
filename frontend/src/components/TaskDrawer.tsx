@@ -3,26 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { api, Comment, Task, TaskEvent } from "@/lib/api";
 import { Markdown } from "@/components/Markdown";
 import { formatDate, formatTime } from "@/lib/utils";
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  in_progress: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-  done: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-};
+import { STATUS_COLORS, AGENT_COLORS } from "@/lib/config";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
   in_progress: "In Progress",
   done: "Done",
-};
-
-const AGENT_COLORS: Record<string, string> = {
-  dev: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  researcher: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  support: "bg-orange-500/10 text-orange-400 border-orange-500/20",
 };
 
 type TimelineItem =
@@ -40,13 +31,19 @@ function mergeTimeline(comments: Comment[], events: TaskEvent[]): TimelineItem[]
 interface TaskDrawerProps {
   task: Task | null;
   onClose: () => void;
+  onTaskUpdated?: (task: Task) => void;
+  onTaskDeleted?: (id: number) => void;
 }
 
-export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
+export function TaskDrawer({ task, onClose, onTaskUpdated, onTaskDeleted }: TaskDrawerProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -67,6 +64,7 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
     if (!task) {
       setComments([]);
       setEvents([]);
+      setEditing(false);
       if (pollRef.current) clearInterval(pollRef.current);
       return;
     }
@@ -122,6 +120,42 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
     }
   };
 
+  const startEdit = () => {
+    if (!task) return;
+    setEditTitle(task.title);
+    setEditDesc(task.description ?? "");
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!task) return;
+    setSavingEdit(true);
+    try {
+      const updated = await api.tasks.update(task.id, {
+        title: editTitle.trim() || task.title,
+        description: editDesc || undefined,
+      });
+      onTaskUpdated?.(updated);
+      setEditing(false);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const retryTask = async () => {
+    if (!task) return;
+    const updated = await api.tasks.update(task.id, { status: "pending" });
+    onTaskUpdated?.(updated);
+  };
+
+  const deleteTask = async () => {
+    if (!task) return;
+    if (!window.confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
+    await api.tasks.delete(task.id);
+    onTaskDeleted?.(task.id);
+    onClose();
+  };
+
   const isOpen = task !== null;
   const timeline = mergeTimeline(comments, events);
   const workedBy = task?.agent_type || task?.assigned_agent;
@@ -146,27 +180,67 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
           <>
             {/* Header */}
             <div className="px-5 py-4 border-b border-zinc-800">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-zinc-100 text-sm leading-snug">
-                    {task.title}
-                  </p>
-                  {task.description && (
-                    <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
-                      {task.description}
-                    </p>
-                  )}
+              {editing ? (
+                <div className="space-y-2">
+                  <Input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="text-sm font-semibold"
+                    placeholder="Task title"
+                  />
+                  <Textarea
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                    className="text-xs resize-none"
+                    placeholder="Description (optional)"
+                    rows={2}
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                    <Button size="sm" onClick={saveEdit} disabled={savingEdit}>
+                      {savingEdit ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
                 </div>
-                <button
-                  onClick={onClose}
-                  className="text-zinc-400 hover:text-zinc-100 transition-colors text-lg leading-none shrink-0 mt-0.5"
-                >
-                  ✕
-                </button>
-              </div>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-zinc-100 text-sm leading-snug">
+                      {task.title}
+                    </p>
+                    {task.description && (
+                      <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
+                        {task.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={startEdit}
+                      className="text-zinc-500 hover:text-zinc-300 transition-colors text-xs px-1.5 py-0.5 rounded hover:bg-zinc-800"
+                      title="Edit task"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      onClick={deleteTask}
+                      className="text-zinc-500 hover:text-red-400 transition-colors text-xs px-1.5 py-0.5 rounded hover:bg-zinc-800"
+                      title="Delete task"
+                    >
+                      ✕
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="text-zinc-400 hover:text-zinc-100 transition-colors text-lg leading-none ml-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Meta badges */}
-              <div className="flex flex-wrap gap-1.5 mt-3">
+              <div className="flex flex-wrap gap-1.5 mt-3 items-center">
                 <span
                   className={`text-xs px-2 py-0.5 rounded border ${
                     STATUS_COLORS[task.status] ?? "bg-zinc-700 text-zinc-400"
@@ -187,6 +261,15 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
                   >
                     @{workedBy}
                   </span>
+                )}
+                {task.status === "in_progress" && (
+                  <button
+                    onClick={retryTask}
+                    className="text-xs px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+                    title="Reset to pending for re-dispatch"
+                  >
+                    ↺ Retry
+                  </button>
                 )}
               </div>
 
@@ -338,12 +421,12 @@ function CommentBubble({ comment }: { comment: Comment }) {
         {!isUser && (
           <p
             className={`text-xs font-medium mb-1 ${
-              AGENT_COLORS[comment.author]
-                ? comment.author === "dev"
-                  ? "text-blue-400"
-                  : comment.author === "researcher"
-                  ? "text-purple-400"
-                  : "text-orange-400"
+              comment.author === "dev"
+                ? "text-blue-400"
+                : comment.author === "researcher"
+                ? "text-purple-400"
+                : comment.author === "support"
+                ? "text-orange-400"
                 : "text-zinc-400"
             }`}
           >

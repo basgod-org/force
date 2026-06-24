@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardHeader,
@@ -63,6 +64,12 @@ export default function ProjectsPage() {
         </Dialog>
       </div>
 
+      {error && (
+        <div className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-400 mb-4">
+          {error}
+        </div>
+      )}
+
       {loading ? (
         <div className="text-muted-foreground text-sm">Loading…</div>
       ) : projects.length === 0 ? (
@@ -81,6 +88,7 @@ export default function ProjectsPage() {
 }
 
 function ProjectCard({ project }: { project: Project }) {
+  const router = useRouter();
   const date = formatDate(project.created_at, {
     month: "short",
     day: "numeric",
@@ -97,9 +105,14 @@ function ProjectCard({ project }: { project: Project }) {
           </CardDescription>
         )}
         <CardAction>
-          <Badge variant="secondary">
-            {project.task_count} {project.task_count === 1 ? "task" : "tasks"}
-          </Badge>
+          <button
+            onClick={() => router.push(`/tasks?project=${project.id}`)}
+            title="View tasks for this project"
+          >
+            <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80 transition-colors">
+              {project.task_count} {project.task_count === 1 ? "task" : "tasks"}
+            </Badge>
+          </button>
         </CardAction>
       </CardHeader>
       {project.repo_path && (
@@ -121,11 +134,13 @@ function ProjectForm({ onCreated }: { onCreated: (p: Project) => void }) {
   const [description, setDescription] = useState("");
   const [repoPath, setRepoPath] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       const project = await api.projects.create({
         name,
@@ -133,6 +148,8 @@ function ProjectForm({ onCreated }: { onCreated: (p: Project) => void }) {
         repo_path: repoPath || undefined,
       });
       onCreated(project);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setSaving(false);
     }
@@ -140,6 +157,11 @@ function ProjectForm({ onCreated }: { onCreated: (p: Project) => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {error && (
+        <div className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-400">
+          {error}
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="name">Name</Label>
         <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Project name" required />

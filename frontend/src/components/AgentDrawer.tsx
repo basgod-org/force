@@ -4,25 +4,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { api, Agent, AgentStats, Task } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
-
-const MODEL_LABEL: Record<string, string> = {
-  "claude-opus-4-8": "Opus 4.8",
-  "claude-sonnet-4-6": "Sonnet 4.6",
-  "claude-haiku-4-5": "Haiku 4.5",
-  "claude-haiku-4-5-20251001": "Haiku 4.5",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  in_progress: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-  done: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-};
-
-const AGENT_ACCENT: Record<string, string> = {
-  dev: "bg-blue-600",
-  researcher: "bg-purple-600",
-  support: "bg-orange-600",
-};
+import { MODEL_LABEL, STATUS_COLORS, AGENT_ACCENT } from "@/lib/config";
 
 interface AgentDrawerProps {
   agent: Agent | null;
@@ -56,7 +38,7 @@ export function AgentDrawer({ agent, onClose, onTaskClick }: AgentDrawerProps) {
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-xl ${AGENT_ACCENT[agent.id] ?? "bg-indigo-600"} flex items-center justify-center shrink-0`}>
+                <div className={`w-9 h-9 rounded-xl ${AGENT_ACCENT[agent.id]?.bubble ?? "bg-indigo-600"} flex items-center justify-center shrink-0`}>
                   <span className="text-white font-semibold text-sm">{agent.name.slice(0, 1).toUpperCase()}</span>
                 </div>
                 <div>

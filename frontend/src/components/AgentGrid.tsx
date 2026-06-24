@@ -5,23 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { AgentDrawer } from "@/components/AgentDrawer";
 import { AgentChat } from "@/components/AgentChat";
 import { Agent, Task } from "@/lib/api";
+import { AGENT_ACCENT, DEFAULT_AGENT_ACCENT, MODEL_LABEL } from "@/lib/config";
 
 export type { Agent };
-
-const MODEL_LABEL: Record<string, string> = {
-  "claude-opus-4-8": "Opus 4.8",
-  "claude-sonnet-4-6": "Sonnet 4.6",
-  "claude-haiku-4-5": "Haiku 4.5",
-  "claude-haiku-4-5-20251001": "Haiku 4.5",
-};
-
-const AGENT_ACCENT: Record<string, { bar: string; avatar: string; glow: string; chat: string }> = {
-  dev:        { bar: "from-blue-500 to-indigo-500",   avatar: "from-blue-600 to-indigo-600",   glow: "hover:shadow-blue-500/10",   chat: "hover:bg-blue-600" },
-  researcher: { bar: "from-purple-500 to-violet-500", avatar: "from-purple-600 to-violet-600", glow: "hover:shadow-purple-500/10", chat: "hover:bg-purple-600" },
-  support:    { bar: "from-orange-500 to-amber-500",  avatar: "from-orange-600 to-amber-600",  glow: "hover:shadow-orange-500/10", chat: "hover:bg-orange-600" },
-};
-
-const DEFAULT_ACCENT = { bar: "from-indigo-500 to-violet-500", avatar: "from-indigo-600 to-violet-600", glow: "hover:shadow-indigo-500/10", chat: "hover:bg-indigo-600" };
 
 interface AgentGridProps {
   agents: Agent[];
@@ -30,7 +16,7 @@ interface AgentGridProps {
 
 export function AgentGrid({ agents, onTaskClick }: AgentGridProps) {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [chatAgent, setChatAgent] = useState<Agent | null>(null);
+  const [chatAgentId, setChatAgentId] = useState<string | null>(null);
 
   if (agents.length === 0) {
     return (
@@ -48,7 +34,7 @@ export function AgentGrid({ agents, onTaskClick }: AgentGridProps) {
             key={agent.id}
             agent={agent}
             onClick={() => setSelectedAgent(agent)}
-            onChat={(e) => { e.stopPropagation(); setChatAgent(agent); }}
+            onChat={(e) => { e.stopPropagation(); setChatAgentId(agent.id); }}
           />
         ))}
       </div>
@@ -59,9 +45,15 @@ export function AgentGrid({ agents, onTaskClick }: AgentGridProps) {
         onTaskClick={(task) => { setSelectedAgent(null); onTaskClick?.(task); }}
       />
 
-      {chatAgent && (
-        <AgentChat agent={chatAgent} onClose={() => setChatAgent(null)} />
-      )}
+      {/* Keep all chat instances mounted so history survives close/reopen */}
+      {agents.map((agent) => (
+        <AgentChat
+          key={agent.id}
+          agent={agent}
+          visible={chatAgentId === agent.id}
+          onClose={() => setChatAgentId(null)}
+        />
+      ))}
     </>
   );
 }
@@ -76,7 +68,7 @@ function AgentCard({
   onChat: (e: React.MouseEvent) => void;
 }) {
   const isWorking = agent.status === "working";
-  const accent = AGENT_ACCENT[agent.id] ?? DEFAULT_ACCENT;
+  const accent = AGENT_ACCENT[agent.id] ?? DEFAULT_AGENT_ACCENT;
 
   return (
     <div

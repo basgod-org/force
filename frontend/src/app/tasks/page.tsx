@@ -61,6 +61,9 @@ function TasksPageContent() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterAgent, setFilterAgent] = useState("");
+  const [filterProject, setFilterProject] = useState("");
   const [pages, setPages] = useState<Record<Task["status"], number>>({
     pending: 1,
     in_progress: 1,
@@ -82,7 +85,7 @@ function TasksPageContent() {
 
   useEffect(() => { load(); }, []);
 
-  // Auto-open task drawer when ?task=<id> is in the URL (from notification click)
+  // Auto-open task drawer when ?task=<id> is in the URL
   useEffect(() => {
     const taskId = searchParams.get("task");
     if (!taskId || !tasks.length) return;
@@ -90,15 +93,50 @@ function TasksPageContent() {
     if (found) setSelectedTask(found);
   }, [tasks, searchParams]);
 
+  // Pre-filter by project from URL (?project=<id>)
+  useEffect(() => {
+    const pid = searchParams.get("project");
+    if (pid) setFilterProject(pid);
+  }, [searchParams]);
+
   const advance = async (task: Task, e: React.MouseEvent) => {
     e.stopPropagation();
     const next = STATUS_NEXT[task.status];
     if (!next) return;
+    if (next === "done") {
+      if (!window.confirm(`Move "${task.title}" to Done?`)) return;
+    }
     const updated = await api.tasks.update(task.id, { status: next });
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    if (selectedTask?.id === updated.id) setSelectedTask(updated);
   };
 
-  const allByStatus = (status: Task["status"]) => tasks.filter((t) => t.status === status);
+  const retry = async (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = await api.tasks.update(task.id, { status: "pending" });
+    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    if (selectedTask?.id === updated.id) setSelectedTask(updated);
+  };
+
+  const deleteTask = async (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
+    await api.tasks.delete(task.id);
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    if (selectedTask?.id === task.id) setSelectedTask(null);
+  };
+
+  const filtered = tasks.filter((t) => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (!t.title.toLowerCase().includes(q) && !(t.description ?? "").toLowerCase().includes(q)) return false;
+    }
+    if (filterAgent && (t.assigned_agent ?? t.agent_type) !== filterAgent) return false;
+    if (filterProject && String(t.project_id) !== filterProject) return false;
+    return true;
+  });
+
+  const allByStatus = (status: Task["status"]) => filtered.filter((t) => t.status === status);
   const pagedByStatus = (status: Task["status"]) => {
     const all = allByStatus(status);
     const pg = pages[status];
@@ -139,6 +177,39 @@ function TasksPageContent() {
         </Dialog>
       </div>
 
+      {/* Search & filter bar */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Input
+          placeholder="Search tasks…"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage("pending", 1); setPage("in_progress", 1); setPage("done", 1); }}
+          className="w-56"
+        />
+        <Select value={filterAgent} onValueChange={(v) => setFilterAgent(v === "_all" ? "" : (v ?? ""))}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All agents" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All agents</SelectItem>
+            {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterProject} onValueChange={(v) => setFilterProject(v === "_all" ? "" : (v ?? ""))}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All projects" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All projects</SelectItem>
+            {projects.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {(search || filterAgent || filterProject) && (
+          <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setFilterAgent(""); setFilterProject(""); }}>
+            Clear filters
+          </Button>
+        )}
+      </div>
+
       {loading ? (
         <div className="text-muted-foreground text-sm">Loading…</div>
       ) : (
@@ -157,6 +228,8 @@ function TasksPageContent() {
                       key={task.id}
                       task={task}
                       onAdvance={(e) => advance(task, e)}
+                      onRetry={(e) => retry(task, e)}
+                      onDelete={(e) => deleteTask(task, e)}
                       onClick={() => setSelectedTask(task)}
                     />
                   ))}
@@ -209,6 +282,8 @@ function TasksPageContent() {
             router.replace("/tasks", { scroll: false });
           }
         }}
+        onTaskUpdated={(updated) => setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t))}
+        onTaskDeleted={(id) => { setTasks((prev) => prev.filter((t) => t.id !== id)); setSelectedTask(null); }}
       />
     </div>
   );
@@ -217,10 +292,14 @@ function TasksPageContent() {
 function TaskCard({
   task,
   onAdvance,
+  onRetry,
+  onDelete,
   onClick,
 }: {
   task: Task;
   onAdvance: (e: React.MouseEvent) => void;
+  onRetry: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
   onClick: () => void;
 }) {
   const next = STATUS_NEXT[task.status];
@@ -238,14 +317,24 @@ function TaskCard({
             <Badge variant="outline" className="text-xs">{task.project_name}</Badge>
           )}
           {task.assigned_agent && (
-            <Badge variant="secondary" className="text-xs">{task.assigned_agent}</Badge>
+            <Badge variant="secondary" className="text-xs">@{task.assigned_agent}</Badge>
           )}
         </div>
-        {next && (
-          <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={onAdvance}>
-            Move to {next === "in_progress" ? "In Progress" : "Done"} →
+        <div className="flex gap-1.5 flex-wrap">
+          {next && (
+            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" onClick={onAdvance}>
+              {next === "in_progress" ? "Start →" : "Done →"}
+            </Button>
+          )}
+          {task.status === "in_progress" && (
+            <Button size="sm" variant="ghost" className="text-xs h-7 text-amber-400 hover:text-amber-300" onClick={onRetry} title="Re-dispatch to pending">
+              ↺ Retry
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="text-xs h-7 text-red-400 hover:text-red-300" onClick={onDelete}>
+            ✕
           </Button>
-        )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -265,11 +354,13 @@ function TaskForm({
   const [projectId, setProjectId] = useState<string>("");
   const [agent, setAgent] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       const task = await api.tasks.create({
         title,
@@ -278,6 +369,8 @@ function TaskForm({
         assigned_agent: agent || undefined,
       });
       onCreated(task);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create task");
     } finally {
       setSaving(false);
     }
@@ -285,6 +378,11 @@ function TaskForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {error && (
+        <div className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-400">
+          {error}
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="title">Title</Label>
         <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title" required />
@@ -314,7 +412,7 @@ function TaskForm({
           </SelectTrigger>
           <SelectContent>
             {agents.map((a) => (
-              <SelectItem key={a.id} value={a.name}>{a.name} — {a.role}</SelectItem>
+              <SelectItem key={a.id} value={a.id}>{a.name} — {a.role}</SelectItem>
             ))}
           </SelectContent>
         </Select>

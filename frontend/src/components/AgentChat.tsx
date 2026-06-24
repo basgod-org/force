@@ -2,47 +2,64 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api, Agent, DirectChatMessage } from "@/lib/api";
+import { AGENT_ACCENT, DEFAULT_AGENT_ACCENT } from "@/lib/config";
 
-const AGENT_ACCENT: Record<string, { gradient: string; bubble: string }> = {
-  dev:        { gradient: "from-blue-600 to-indigo-600",   bubble: "bg-blue-600" },
-  researcher: { gradient: "from-purple-600 to-violet-600", bubble: "bg-purple-600" },
-  support:    { gradient: "from-orange-600 to-amber-600",  bubble: "bg-orange-600" },
-};
-const DEFAULT_ACCENT = { gradient: "from-indigo-600 to-violet-600", bubble: "bg-indigo-600" };
+const DISPATCH_TIMEOUT_MS = 120_000; // 2 minutes
 
 interface AgentChatProps {
   agent: Agent;
+  visible: boolean;
   onClose: () => void;
 }
 
-export function AgentChat({ agent, onClose }: AgentChatProps) {
-  const accent = AGENT_ACCENT[agent.id] ?? DEFAULT_ACCENT;
+export function AgentChat({ agent, visible, onClose }: AgentChatProps) {
+  const accent = AGENT_ACCENT[agent.id] ?? DEFAULT_AGENT_ACCENT;
   const [messages, setMessages] = useState<DirectChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [waiting, setWaiting] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+    if (visible) inputRef.current?.focus();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [visible]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, waiting]);
 
+  const clearWaitTimers = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+  };
+
   const startPolling = (agentId: string, sid: string) => {
-    if (pollRef.current) clearInterval(pollRef.current);
+    clearWaitTimers();
     pollRef.current = setInterval(async () => {
       const latest = await api.agents.direct.messages(agentId, sid);
       setMessages(latest);
       const lastIsAgent = latest.length > 0 && latest[latest.length - 1].author !== "user";
-      if (lastIsAgent) setWaiting(false);
+      if (lastIsAgent) {
+        setWaiting(false);
+        setTimedOut(false);
+        clearWaitTimers();
+      }
     }, 2000);
+
+    timeoutRef.current = setTimeout(() => {
+      clearWaitTimers();
+      setWaiting(false);
+      setTimedOut(true);
+    }, DISPATCH_TIMEOUT_MS);
   };
 
   const send = async () => {
@@ -50,6 +67,7 @@ export function AgentChat({ agent, onClose }: AgentChatProps) {
     if (!msg || sending) return;
     setSending(true);
     setInput("");
+    setTimedOut(false);
     try {
       if (!sessionId) {
         const msgs = await api.agents.direct.start(agent.id, msg);
@@ -62,6 +80,7 @@ export function AgentChat({ agent, onClose }: AgentChatProps) {
         const userMsg = await api.agents.direct.send(agent.id, sessionId, msg);
         setMessages((prev) => [...prev, userMsg]);
         setWaiting(true);
+        startPolling(agent.id, sessionId);
       }
     } finally {
       setSending(false);
@@ -74,7 +93,11 @@ export function AgentChat({ agent, onClose }: AgentChatProps) {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col w-[380px] h-[520px] rounded-2xl border border-zinc-700/60 bg-zinc-900/95 backdrop-blur-xl shadow-2xl shadow-black/40 overflow-hidden">
+    <div
+      className={`fixed bottom-6 right-6 z-50 flex flex-col w-[380px] h-[520px] rounded-2xl border border-zinc-700/60 bg-zinc-900/95 backdrop-blur-xl shadow-2xl shadow-black/40 overflow-hidden transition-all duration-200 ${
+        visible ? "opacity-100 pointer-events-auto translate-y-0" : "opacity-0 pointer-events-none translate-y-4"
+      }`}
+    >
       {/* Header */}
       <div className={`flex items-center gap-3 px-4 py-3 bg-gradient-to-r ${accent.gradient} shrink-0`}>
         <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
@@ -94,7 +117,7 @@ export function AgentChat({ agent, onClose }: AgentChatProps) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {messages.length === 0 && !waiting && (
+        {messages.length === 0 && !waiting && !timedOut && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
             <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${accent.gradient} flex items-center justify-center shadow-lg`}>
               <span className="text-white font-bold text-xl">{agent.name.slice(0, 1)}</span>
@@ -137,6 +160,17 @@ export function AgentChat({ agent, onClose }: AgentChatProps) {
               <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
               <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
               <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+          </div>
+        )}
+
+        {timedOut && (
+          <div className="flex justify-start gap-2 items-end">
+            <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${accent.gradient} flex items-center justify-center shrink-0`}>
+              <span className="text-white font-bold text-[10px]">{agent.name.slice(0, 1)}</span>
+            </div>
+            <div className="bg-red-950/60 border border-red-500/30 rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm text-red-400">
+              No response after 2 minutes. The agent may be busy — try sending again.
             </div>
           </div>
         )}

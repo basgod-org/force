@@ -79,6 +79,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -130,6 +131,8 @@ export const api = {
       req<Task>("/api/tasks", { method: "POST", body: JSON.stringify(body) }),
     update: (id: number, body: Partial<Task>) =>
       req<Task>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    delete: (id: number) =>
+      req<void>(`/api/tasks/${id}`, { method: "DELETE" }),
     comments: {
       list: (taskId: number) => req<Comment[]>(`/api/tasks/${taskId}/comments`),
       create: (taskId: number, body: { author: string; body: string }) =>
