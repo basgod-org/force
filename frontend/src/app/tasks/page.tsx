@@ -198,7 +198,9 @@ function TasksPageContent() {
         />
         <Select value={filterAgent} onValueChange={(v) => setFilterAgent(v === "_all" ? "" : (v ?? ""))}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="All agents" />
+            <SelectValue placeholder="All agents">
+              {(v: string) => v ? (agents.find((a) => a.id === v)?.name ?? "All agents") : "All agents"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="_all">All agents</SelectItem>
@@ -207,7 +209,9 @@ function TasksPageContent() {
         </Select>
         <Select value={filterProject} onValueChange={(v) => setFilterProject(v === "_all" ? "" : (v ?? ""))}>
           <SelectTrigger className="w-44">
-            <SelectValue placeholder="All projects" />
+            <SelectValue placeholder="All projects">
+              {(v: string) => v ? (projects.find((p) => String(p.id) === v)?.name ?? "All projects") : "All projects"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="_all">All projects</SelectItem>
@@ -467,7 +471,9 @@ function TaskForm({
         <Label>Project</Label>
         <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
           <SelectTrigger>
-            <SelectValue placeholder="Select project" />
+            <SelectValue placeholder="Select project">
+              {(v: string) => v ? (projects.find((p) => String(p.id) === v)?.name ?? "Select project") : "Select project"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {projects.map((p) => (
@@ -480,7 +486,13 @@ function TaskForm({
         <Label>Assign Agent</Label>
         <Select value={agent} onValueChange={(v) => setAgent(v ?? "")}>
           <SelectTrigger>
-            <SelectValue placeholder="Select agent" />
+            <SelectValue placeholder="Select agent">
+              {(v: string) => {
+                if (!v) return "Select agent";
+                const a = agents.find((ag) => ag.id === v);
+                return a ? `${a.name} — ${a.role}` : "Select agent";
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {agents.map((a) => (

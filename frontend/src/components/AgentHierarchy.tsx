@@ -1,7 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "motion/react";
-import { useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Agent } from "@/lib/api";
 
 const MODEL_LABEL: Record<string, string> = {
@@ -73,7 +72,7 @@ export function AgentHierarchy({ agents }: AgentHierarchyProps) {
         <AnimatePresence>
           {agents.length > 0 && (
             <motion.div
-              className="w-full"
+              className="w-full flex flex-col items-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
@@ -97,26 +96,72 @@ export function AgentHierarchy({ agents }: AgentHierarchyProps) {
   );
 }
 
+function CometBeam({
+  active,
+  height,
+  color,
+  duration = 1.2,
+}: {
+  active: boolean;
+  height: number;
+  color: string;
+  duration?: number;
+}) {
+  const cometLen = Math.round(height * 0.45);
+  return (
+    <AnimatePresence>
+      {active && (
+        <>
+          {/* Glow spread */}
+          <motion.div
+            style={{
+              position: "absolute",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 7,
+              height: cometLen,
+              borderRadius: 4,
+              background: `linear-gradient(to bottom, transparent, rgba(${color},0.25), rgba(${color},0.5))`,
+              filter: "blur(2.5px)",
+              top: -cometLen,
+            }}
+            initial={{ top: -cometLen }}
+            animate={{ top: height }}
+            exit={{ opacity: 0 }}
+            transition={{ duration, repeat: Infinity, ease: "linear", repeatDelay: 0.05 }}
+          />
+          {/* Core streak */}
+          <motion.div
+            style={{
+              position: "absolute",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 2.5,
+              height: cometLen,
+              borderRadius: 2,
+              background: `linear-gradient(to bottom, transparent, rgba(${color},0.6), rgba(${color},1))`,
+              top: -cometLen,
+            }}
+            initial={{ top: -cometLen }}
+            animate={{ top: height }}
+            exit={{ opacity: 0 }}
+            transition={{ duration, repeat: Infinity, ease: "linear", repeatDelay: 0.05 }}
+          />
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function BossConnector({ active, delay = 0 }: { active: boolean; delay?: number }) {
   return (
-    <div className="relative flex flex-col items-center w-px h-8 overflow-visible">
+    <div className="relative flex flex-col items-center" style={{ width: 16, height: 32, overflow: "hidden" }}>
       <svg
-        className="absolute top-0 left-1/2 -translate-x-1/2 overflow-visible"
+        className="absolute top-0 left-1/2 -translate-x-1/2"
         width="3"
         height="32"
         style={{ display: "block" }}
       >
-        {/* Subtle amber glow behind the line */}
-        {active && (
-          <motion.line
-            x1="1.5" y1="0" x2="1.5" y2="32"
-            stroke="rgb(251,191,36)"
-            strokeWidth="4"
-            strokeOpacity={0}
-            animate={{ strokeOpacity: [0, 0.15, 0] }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
         <motion.line
           x1="1.5" y1="0" x2="1.5" y2="32"
           stroke={active ? "rgb(251,191,36)" : "rgb(120,90,30)"}
@@ -126,48 +171,16 @@ function BossConnector({ active, delay = 0 }: { active: boolean; delay?: number 
           transition={{ duration: 0.6, delay, ease: "easeOut", stroke: { duration: 0.5 } }}
         />
       </svg>
-
-      {/* Flowing amber dot — source of authority */}
-      <AnimatePresence>
-        {active && (
-          <motion.div
-            className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
-            style={{
-              background: "rgb(251,191,36)",
-              boxShadow: "0 0 8px 3px rgba(251,191,36,0.5)",
-              top: 0,
-            }}
-            initial={{ top: 0, opacity: 0.9 }}
-            animate={{ top: 28, opacity: [0.9, 1, 0.7] }}
-            transition={{
-              duration: 1.0,
-              repeat: Infinity,
-              ease: "easeIn",
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <CometBeam active={active} height={32} color="251,191,36" duration={1.2} />
     </div>
   );
 }
 
 function AnimatedConnector({ active, delay = 0 }: { active: boolean; delay?: number }) {
-  const pathLength = useMotionValue(0);
-
-  useEffect(() => {
-    const controls = animate(pathLength, 1, {
-      duration: 0.6,
-      delay,
-      ease: "easeOut",
-    });
-    return controls.stop;
-  }, []);
-
   return (
-    <div className="relative flex flex-col items-center w-px h-8 overflow-visible">
-      {/* Drawn-in base line using svg */}
+    <div className="relative flex flex-col items-center" style={{ width: 16, height: 32, overflow: "hidden" }}>
       <svg
-        className="absolute top-0 left-1/2 -translate-x-1/2 overflow-visible"
+        className="absolute top-0 left-1/2 -translate-x-1/2"
         width="2"
         height="32"
         style={{ display: "block" }}
@@ -181,23 +194,7 @@ function AnimatedConnector({ active, delay = 0 }: { active: boolean; delay?: num
           transition={{ duration: 0.6, delay, ease: "easeOut", stroke: { duration: 0.5 } }}
         />
       </svg>
-
-      {/* Flowing dot */}
-      <AnimatePresence>
-        {active && (
-          <motion.div
-            className="absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400"
-            style={{ boxShadow: "0 0 6px 2px rgba(52,211,153,0.6)", top: 0 }}
-            initial={{ top: 0 }}
-            animate={{ top: 28 }}
-            transition={{
-              duration: 1.2,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <CometBeam active={active} height={32} color="52,211,153" duration={1.2} />
     </div>
   );
 }
@@ -291,30 +288,26 @@ function WorkerNode({ agent, index }: { agent: Agent; index: number }) {
       transition={{ duration: 0.5, delay: 0.7 + index * 0.1, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* Vertical stub from rail */}
-      <div className="relative flex flex-col items-center w-px h-7 overflow-visible">
-        <svg className="absolute top-0 left-1/2 -translate-x-1/2" width="2" height="28">
+      <div className="relative flex flex-col items-center" style={{ width: 16, height: 28, overflow: "hidden" }}>
+        <svg
+          className="absolute top-0 left-1/2 -translate-x-1/2"
+          width="3"
+          height="28"
+          style={{ display: "block" }}
+        >
           <motion.line
-            x1="1" y1="0" x2="1" y2="28"
+            x1="1.5" y1="0" x2="1.5" y2="28"
+            stroke={isWorking ? `rgb(${accent.glowRgb})` : "rgb(63,63,70)"}
             strokeWidth="1.5"
             initial={{ pathLength: 0 }}
             animate={{
               pathLength: 1,
               stroke: isWorking ? `rgb(${accent.glowRgb})` : "rgb(63,63,70)",
             }}
-            transition={{ duration: 0.5, delay: 0.8 + index * 0.1, stroke: { duration: 0.4 } }}
+            transition={{ duration: 0.5, delay: 0.8 + index * 0.1, ease: "easeOut", stroke: { duration: 0.4 } }}
           />
         </svg>
-        <AnimatePresence>
-          {isWorking && (
-            <motion.div
-              className={`absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${accent.lineColor}`}
-              style={{ boxShadow: `0 0 4px rgba(${accent.glowRgb},0.5)`, top: 0 }}
-              initial={{ top: 0 }}
-              animate={{ top: 24 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
-            />
-          )}
-        </AnimatePresence>
+        <CometBeam active={isWorking} height={28} color={accent.glowRgb} duration={1.0} />
       </div>
 
       {/* Node card */}
