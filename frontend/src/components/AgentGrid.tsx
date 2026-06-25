@@ -15,7 +15,11 @@ interface AgentGridProps {
   onTaskClick?: (task: Task) => void;
 }
 
-export function AgentGrid({ agents, onTaskClick }: AgentGridProps) {
+// Only Support is available in the chat UI.
+const CHAT_AGENT_IDS = ["support"];
+
+export function AgentGrid({ agents: allAgents, onTaskClick }: AgentGridProps) {
+  const agents = allAgents.filter((a) => CHAT_AGENT_IDS.includes(a.id));
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [chatAgentId, setChatAgentId] = useState<string | null>(null);
 
