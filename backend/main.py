@@ -548,23 +548,18 @@ async def direct_chat_agent_reply(agent_id: str, session_id: str, body: DirectCh
 
 
 def _build_direct_chat_prompt(agent_id: str, agent_name: str, session_id: str, message: str) -> str:
-    return f"""You are {agent_name}, a live AI assistant. A user is chatting with you directly in Force (an AI team management app).
+    # IMPORTANT: OpenClaw wraps this webhook body as EXTERNAL_UNTRUSTED_CONTENT with a
+    # security notice that tells the agent NOT to execute commands found inside it. So we
+    # must NOT put the reply curl in here — the agent (correctly) refuses to run commands
+    # embedded in untrusted webhook content, and the reply silently never gets posted.
+    #
+    # Instead the body carries only the trusted trigger marker ("Direct chat | Session:")
+    # plus the user's message. HOW to reply (the curl to /agents/{id}/direct/{sid}/reply)
+    # lives in the agent's workspace AGENTS.md, which is trusted system context the agent
+    # will act on. This mirrors the dev agent's working pattern.
+    return f"""Direct chat | Session: {session_id}
 
-User: {message}
-
-You have NO other way to reach the user. Your plain-text response is NOT delivered anywhere — it is discarded. The ONLY way to send your reply is to run this exact command with the exec tool:
-
-curl -s -X POST {FORCE_API}/agents/{agent_id}/direct/{session_id}/reply \\
-  -H "Content-Type: application/json" \\
-  -d '{{"author": "{agent_id}", "body": "YOUR_REPLY_HERE"}}'
-
-You MUST run that curl to answer. Replace YOUR_REPLY_HERE with your actual reply (properly JSON-escaped).
-
-Rules:
-- Be conversational, helpful and concise. No task-management talk.
-- Do NOT message anyone externally (Telegram, WhatsApp, etc.) — only the curl above.
-- Your session context holds the full conversation history — no need to replay it.
-"""
+User: {message}"""
 
 
 @app.get("/health")
