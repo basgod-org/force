@@ -49,7 +49,7 @@ export function AgentHierarchy({ agents }: AgentHierarchyProps) {
           />
         </motion.div>
 
-        <AnimatedConnector active={anyWorking} delay={0.3} />
+        <BossConnector active={anyWorking} delay={0.3} />
 
         {/* Dispatcher */}
         <motion.div
@@ -93,6 +93,60 @@ export function AgentHierarchy({ agents }: AgentHierarchyProps) {
           )}
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+function BossConnector({ active, delay = 0 }: { active: boolean; delay?: number }) {
+  return (
+    <div className="relative flex flex-col items-center w-px h-8 overflow-visible">
+      <svg
+        className="absolute top-0 left-1/2 -translate-x-1/2 overflow-visible"
+        width="3"
+        height="32"
+        style={{ display: "block" }}
+      >
+        {/* Subtle amber glow behind the line */}
+        {active && (
+          <motion.line
+            x1="1.5" y1="0" x2="1.5" y2="32"
+            stroke="rgb(251,191,36)"
+            strokeWidth="4"
+            strokeOpacity={0}
+            animate={{ strokeOpacity: [0, 0.15, 0] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          />
+        )}
+        <motion.line
+          x1="1.5" y1="0" x2="1.5" y2="32"
+          stroke={active ? "rgb(251,191,36)" : "rgb(120,90,30)"}
+          strokeWidth="2"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1, stroke: active ? "rgb(251,191,36)" : "rgb(120,90,30)" }}
+          transition={{ duration: 0.6, delay, ease: "easeOut", stroke: { duration: 0.5 } }}
+        />
+      </svg>
+
+      {/* Flowing amber dot — source of authority */}
+      <AnimatePresence>
+        {active && (
+          <motion.div
+            className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
+            style={{
+              background: "rgb(251,191,36)",
+              boxShadow: "0 0 8px 3px rgba(251,191,36,0.5)",
+              top: 0,
+            }}
+            initial={{ top: 0, opacity: 0.9 }}
+            animate={{ top: 28, opacity: [0.9, 1, 0.7] }}
+            transition={{
+              duration: 1.0,
+              repeat: Infinity,
+              ease: "easeIn",
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -248,21 +249,22 @@ export function TaskDrawer({ task, onClose, onTaskUpdated, onTaskDeleted }: Task
                           </motion.button>
                           <motion.button
                             onClick={deleteTask}
-                            className="text-zinc-500 hover:text-red-400 transition-colors text-xs px-1.5 py-0.5 rounded hover:bg-zinc-800"
+                            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-red-800/50 bg-red-950/30 text-red-400 hover:bg-red-900/50 hover:border-red-600 hover:text-red-300 transition-all"
                             title="Delete task"
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.92 }}
                           >
-                            ✕
+                            <Trash2 size={12} />
                           </motion.button>
                           <motion.button
                             onClick={onClose}
-                            className="text-zinc-400 hover:text-zinc-100 transition-colors text-lg leading-none ml-1"
+                            className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded hover:bg-zinc-800 ml-1"
+                            title="Close"
                             whileHover={{ scale: 1.1, rotate: 90 }}
                             whileTap={{ scale: 0.9 }}
                             transition={{ duration: 0.2 }}
                           >
-                            ✕
+                            <X size={15} />
                           </motion.button>
                         </div>
                       </motion.div>
