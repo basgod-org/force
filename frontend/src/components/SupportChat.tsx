@@ -132,13 +132,13 @@ export function SupportChat({ visible, onClose }: SupportChatProps) {
     <Sheet open={visible} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="w-full gap-0 border-l border-zinc-700/60 bg-zinc-900/95 p-0 backdrop-blur-xl sm:max-w-[420px]"
+        className="w-full gap-0 border-l border-zinc-700/60 bg-zinc-900/95 p-0 backdrop-blur-xl data-[side=right]:h-[100dvh] sm:max-w-[420px]"
       >
         {/* Visually-hidden title keeps the dialog accessible without showing header text. */}
         <SheetTitle className="sr-only">Support chat</SheetTitle>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 pb-4 pt-12 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 pt-12 space-y-3">
           {loading && (
             <div className="flex items-center justify-center h-full text-sm text-zinc-500">
               Loading…
@@ -207,7 +207,10 @@ export function SupportChat({ visible, onClose }: SupportChatProps) {
         </div>
 
         {/* Input */}
-        <div className="px-3 pb-3 pt-2 border-t border-zinc-800 shrink-0">
+        <div
+          className="px-3 pt-2 border-t border-zinc-800 shrink-0"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        >
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}

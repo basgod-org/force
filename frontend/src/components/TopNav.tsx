@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Bell, MessageSquare } from "lucide-react";
+import { Bell, MessageSquare, Menu, X } from "lucide-react";
 import { useNotifications } from "@/lib/notifications";
 import { formatTime } from "@/lib/utils";
 import { SupportChat } from "@/components/SupportChat";
@@ -21,6 +21,7 @@ export function TopNav() {
     useNotifications();
   const [panelOpen, setPanelOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Close panel on outside click
@@ -35,6 +36,11 @@ export function TopNav() {
     return () => document.removeEventListener("mousedown", handler);
   }, [panelOpen]);
 
+  // Close the mobile menu whenever the route changes.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [path]);
+
   const navLinks = [
     { href: "/", label: "Dashboard" },
     { href: "/tasks", label: "Tasks" },
@@ -43,9 +49,30 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center h-14 gap-2 sm:gap-6">
+        {/* Hamburger — mobile only */}
+        <motion.button
+          onClick={() => setMenuOpen((o) => !o)}
+          className="sm:hidden flex h-10 w-10 items-center justify-center rounded-md text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors shrink-0"
+          aria-label="Menu"
+          aria-expanded={menuOpen}
+          whileTap={{ scale: 0.9 }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {menuOpen ? (
+              <motion.span key="x" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}>
+                <X size={20} />
+              </motion.span>
+            ) : (
+              <motion.span key="menu" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}>
+                <Menu size={20} />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
+
         {/* Logo */}
-        <div className="flex items-center gap-2 shrink-0">
+        <Link href="/" className="flex items-center gap-2 shrink-0">
           <motion.div
             className="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center"
             whileHover={{ scale: 1.1, rotate: 5 }}
@@ -66,10 +93,10 @@ export function TopNav() {
             </svg>
           </motion.div>
           <span className="font-semibold text-zinc-100 tracking-tight">Force</span>
-        </div>
+        </Link>
 
-        {/* Nav links */}
-        <nav className="flex items-center gap-0.5">
+        {/* Nav links — desktop only */}
+        <nav className="hidden sm:flex items-center gap-0.5">
           {navLinks.map(({ href, label }) => (
             <Link
               key={href}
@@ -95,11 +122,14 @@ export function TopNav() {
         {/* Spacer */}
         <div className="flex-1" />
 
+        {/* Right-side actions — always visible, never clipped */}
+        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+
         {/* Notification Bell */}
         <div className="relative" ref={panelRef}>
           <motion.button
             onClick={() => setPanelOpen((o) => !o)}
-            className="relative p-2 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors"
+            className="relative flex h-10 w-10 items-center justify-center rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors"
             aria-label="Notifications"
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.92 }}
@@ -223,14 +253,45 @@ export function TopNav() {
         {/* Support chat bubble */}
         <motion.button
           onClick={() => setChatOpen(true)}
-          className="p-2 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors"
+          className="flex h-10 w-10 items-center justify-center rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors"
           aria-label="Support chat"
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
         >
           <MessageSquare size={18} />
         </motion.button>
+        </div>
       </div>
+
+      {/* Mobile dropdown nav */}
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.nav
+            className="sm:hidden overflow-hidden border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="px-3 py-2 space-y-1">
+              {navLinks.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center min-h-[44px] px-3 rounded-md text-sm font-medium transition-colors ${
+                    path === href
+                      ? "bg-zinc-800 text-zinc-100"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </motion.nav>
+        )}
+      </AnimatePresence>
 
       <SupportChat visible={chatOpen} onClose={() => setChatOpen(false)} />
     </header>
