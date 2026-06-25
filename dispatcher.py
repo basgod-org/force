@@ -187,6 +187,10 @@ def dispatch_task(task):
         "name": f"Force task #{task_id}",
         "agentId": agent_type,
         "sessionKey": session_key,
+        # Agent reports back via curl to the Force API, not via a chat channel.
+        # deliver=False stops OpenClaw trying to deliver the final turn (which
+        # errors when multiple channels are configured).
+        "deliver": False,
     }).encode()
     hook_req = urllib.request.Request(
         OPENCLAW_HOOK,

@@ -37,7 +37,12 @@ def _run_claude_in_background(prompt: str, cwd: str, env: dict) -> None:
 
 
 def _dispatch_to_hook(agent_id: str, message: str, name: str = "Force Chat", session_key: Optional[str] = None) -> bool:
-    body: dict = {"message": message, "name": name, "agentId": agent_id}
+    # deliver=False: the agent reports back to Force via curl (to /comments or
+    # /direct/{sid}/reply), so OpenClaw must NOT try to deliver the agent's final
+    # turn to a chat channel. Without this the hook run dies with
+    # "Channel is required when multiple channels are configured" and the agent's
+    # reply never completes.
+    body: dict = {"message": message, "name": name, "agentId": agent_id, "deliver": False}
     if session_key:
         body["sessionKey"] = session_key
     payload = json.dumps(body).encode()
@@ -519,8 +524,10 @@ async def direct_chat_send(agent_id: str, session_id: str, body: DirectChatSend,
     )).fetchone()
 
     session_key = f"{agent_id}:direct:{session_id}"
+    agent = next((a for a in AGENTS if a.id == agent_id), None)
+    prompt = _build_direct_chat_prompt(agent_id, agent.name if agent else agent_id, session_id, body.message)
     asyncio.get_running_loop().run_in_executor(
-        None, lambda: _dispatch_to_hook(agent_id, body.message, f"Direct chat {session_id}", session_key)
+        None, lambda: _dispatch_to_hook(agent_id, prompt, f"Direct chat {session_id}", session_key)
     )
 
     return DirectChatMessage(**dict(row))
@@ -541,20 +548,21 @@ async def direct_chat_agent_reply(agent_id: str, session_id: str, body: DirectCh
 
 
 def _build_direct_chat_prompt(agent_id: str, agent_name: str, session_id: str, message: str) -> str:
-    return f"""You are {agent_name}, a live AI assistant. A user is chatting with you directly.
+    return f"""You are {agent_name}, a live AI assistant. A user is chatting with you directly in Force (an AI team management app).
 
 User: {message}
 
-Respond naturally and conversationally. Be helpful and concise.
+You have NO other way to reach the user. Your plain-text response is NOT delivered anywhere — it is discarded. The ONLY way to send your reply is to run this exact command with the exec tool:
 
-Post your reply with:
 curl -s -X POST {FORCE_API}/agents/{agent_id}/direct/{session_id}/reply \\
   -H "Content-Type: application/json" \\
   -d '{{"author": "{agent_id}", "body": "YOUR_REPLY_HERE"}}'
 
+You MUST run that curl to answer. Replace YOUR_REPLY_HERE with your actual reply (properly JSON-escaped).
+
 Rules:
-- Be conversational and direct. No task-management talk.
-- Do NOT message anyone externally (Telegram, WhatsApp, etc).
+- Be conversational, helpful and concise. No task-management talk.
+- Do NOT message anyone externally (Telegram, WhatsApp, etc.) — only the curl above.
 - Your session context holds the full conversation history — no need to replay it.
 """
 
