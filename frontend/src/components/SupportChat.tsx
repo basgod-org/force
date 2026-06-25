@@ -76,7 +76,7 @@ export function SupportChat({ visible, onClose }: SupportChatProps) {
   // visible scroll-jump during the slide-in), smooth for subsequent messages.
   useEffect(() => {
     if (!visible) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, waiting, visible]);
 
   const startPolling = (sid: string) => {
@@ -137,6 +137,9 @@ export function SupportChat({ visible, onClose }: SupportChatProps) {
         {/* Visually-hidden title keeps the dialog accessible without showing header text. */}
         <SheetTitle className="sr-only">Support chat</SheetTitle>
 
+        {/* Full-height flex column so the message list scrolls and the input stays pinned,
+            independent of how the Sheet popup's own flex/gap classes merge. */}
+        <div className="flex h-full min-h-0 flex-col">
         {/* Messages */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 pt-12 space-y-3">
           {loading && (
@@ -233,6 +236,7 @@ export function SupportChat({ visible, onClose }: SupportChatProps) {
               </svg>
             </motion.button>
           </div>
+        </div>
         </div>
       </SheetContent>
     </Sheet>
