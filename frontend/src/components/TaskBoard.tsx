@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Task } from "@/lib/api";
 import {
   Pagination,
@@ -38,14 +39,20 @@ export function TaskBoard({ pending, inProgress, done, onTaskClick, pageSize = 5
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {COLUMNS.map((col) => (
-        <TaskColumn
+      {COLUMNS.map((col, i) => (
+        <motion.div
           key={col.key}
-          col={col}
-          tasks={columns[col.key]}
-          pageSize={pageSize}
-          onTaskClick={onTaskClick}
-        />
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <TaskColumn
+            col={col}
+            tasks={columns[col.key]}
+            pageSize={pageSize}
+            onTaskClick={onTaskClick}
+          />
+        </motion.div>
       ))}
     </div>
   );
@@ -69,7 +76,7 @@ function TaskColumn({
   const visible = tasks.slice(start, start + pageSize);
 
   return (
-    <div className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900/60">
+    <div className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900/60 h-full">
       <div className={`h-[3px] bg-gradient-to-r ${col.accent}`} />
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
@@ -77,18 +84,46 @@ function TaskColumn({
             <span className={`w-2 h-2 rounded-full ${col.dot}`} />
             <span className="text-sm font-semibold text-zinc-200">{col.label}</span>
           </div>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${col.count}`}>
+          <motion.span
+            className={`text-xs font-medium px-2 py-0.5 rounded-full ${col.count}`}
+            key={tasks.length}
+            initial={{ scale: 1.25 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+          >
             {tasks.length}
-          </span>
+          </motion.span>
         </div>
         <div className="space-y-2 min-h-[60px]">
-          {visible.length === 0 ? (
-            <p className="text-xs text-zinc-600 text-center py-4">Empty</p>
-          ) : (
-            visible.map((task) => (
-              <TaskCard key={task.id} task={task} onClick={() => onTaskClick?.(task)} />
-            ))
-          )}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {visible.length === 0 ? (
+              <motion.p
+                key="empty"
+                className="text-xs text-zinc-600 text-center py-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                Empty
+              </motion.p>
+            ) : (
+              visible.map((task, i) => (
+                <motion.div
+                  key={task.id}
+                  layout
+                  initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: -20, scale: 0.95 }}
+                  transition={{
+                    layout: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+                    default: { duration: 0.3, delay: i * 0.04, ease: [0.16, 1, 0.3, 1] },
+                  }}
+                >
+                  <TaskCard task={task} onClick={() => onTaskClick?.(task)} />
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
         </div>
         {totalPages > 1 && (
           <div className="mt-3 pt-3 border-t border-zinc-800">
@@ -128,11 +163,14 @@ function TaskColumn({
 
 function TaskCard({ task, onClick }: { task: Task; onClick?: () => void }) {
   return (
-    <div
+    <motion.div
       className={`rounded-lg border border-zinc-800 bg-zinc-800/40 p-3 space-y-1.5 ${
-        onClick ? "cursor-pointer hover:bg-zinc-800/70 hover:border-zinc-700 transition-all" : ""
+        onClick ? "cursor-pointer" : ""
       }`}
       onClick={onClick}
+      whileHover={{ backgroundColor: "rgba(39,39,42,0.7)", borderColor: "rgba(63,63,70,1)", y: -1 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ duration: 0.15 }}
     >
       <p className="text-sm font-medium text-zinc-200 leading-snug">{task.title}</p>
       {task.description && (
@@ -150,6 +188,6 @@ function TaskCard({ task, onClick }: { task: Task; onClick?: () => void }) {
           </span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

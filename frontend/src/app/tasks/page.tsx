@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,10 +35,10 @@ import { api, Task, Project, Agent } from "@/lib/api";
 
 const PAGE_SIZE = 10;
 
-const COLUMNS: { id: Task["status"]; label: string }[] = [
-  { id: "pending", label: "Pending" },
-  { id: "in_progress", label: "In Progress" },
-  { id: "done", label: "Done" },
+const COLUMNS: { id: Task["status"]; label: string; accent: string; dot: string }[] = [
+  { id: "pending",     label: "Pending",     accent: "from-amber-500 to-orange-500",  dot: "bg-amber-400" },
+  { id: "in_progress", label: "In Progress", accent: "from-indigo-500 to-blue-500",   dot: "bg-indigo-400" },
+  { id: "done",        label: "Done",        accent: "from-emerald-500 to-teal-500",  dot: "bg-emerald-400" },
 ];
 
 const STATUS_NEXT: Record<Task["status"], Task["status"] | null> = {
@@ -152,7 +153,12 @@ function TasksPageContent() {
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+      <motion.div
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8"
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div>
           <h1 className="text-2xl font-semibold">Tasks</h1>
           <p className="text-muted-foreground text-sm mt-1">Track what your agents are working on</p>
@@ -175,10 +181,15 @@ function TasksPageContent() {
             />
           </DialogContent>
         </Dialog>
-      </div>
+      </motion.div>
 
       {/* Search & filter bar */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <motion.div
+        className="flex flex-wrap gap-2 mb-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.35, delay: 0.1 }}
+      >
         <Input
           placeholder="Search tasks…"
           value={search}
@@ -203,40 +214,86 @@ function TasksPageContent() {
             {projects.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        {(search || filterAgent || filterProject) && (
-          <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setFilterAgent(""); setFilterProject(""); }}>
-            Clear filters
-          </Button>
-        )}
-      </div>
+        <AnimatePresence>
+          {(search || filterAgent || filterProject) && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.15 }}
+            >
+              <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setFilterAgent(""); setFilterProject(""); }}>
+                Clear filters
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       {loading ? (
-        <div className="text-muted-foreground text-sm">Loading…</div>
+        <motion.div
+          className="text-muted-foreground text-sm"
+          animate={{ opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+        >
+          Loading…
+        </motion.div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {COLUMNS.map((col) => {
+          {COLUMNS.map((col, colIdx) => {
             const { items, total, totalPages, currentPage } = pagedByStatus(col.id);
             return (
-              <div key={col.id}>
+              <motion.div
+                key={col.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: colIdx * 0.08, ease: [0.16, 1, 0.3, 1] }}
+              >
                 <div className="flex items-center gap-2 mb-3">
+                  <span className={`w-2 h-2 rounded-full ${col.dot}`} />
                   <span className="text-sm font-medium">{col.label}</span>
-                  <Badge variant="secondary" className="text-xs">{total}</Badge>
+                  <motion.div
+                    key={total}
+                    initial={{ scale: 1.3 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  >
+                    <Badge variant="secondary" className="text-xs">{total}</Badge>
+                  </motion.div>
                 </div>
                 <div className="flex flex-col gap-2">
-                  {items.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onAdvance={(e) => advance(task, e)}
-                      onRetry={(e) => retry(task, e)}
-                      onDelete={(e) => deleteTask(task, e)}
-                      onClick={() => setSelectedTask(task)}
-                    />
-                  ))}
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {items.map((task, i) => (
+                      <motion.div
+                        key={task.id}
+                        layout
+                        initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -30, scale: 0.95 }}
+                        transition={{
+                          layout: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+                          default: { duration: 0.3, delay: i * 0.04 },
+                        }}
+                      >
+                        <TaskCard
+                          task={task}
+                          onAdvance={(e) => advance(task, e)}
+                          onRetry={(e) => retry(task, e)}
+                          onDelete={(e) => deleteTask(task, e)}
+                          onClick={() => setSelectedTask(task)}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                   {items.length === 0 && (
-                    <div className="border border-dashed border-border rounded-md p-4 text-xs text-muted-foreground text-center">
+                    <motion.div
+                      className="border border-dashed border-border rounded-md p-4 text-xs text-muted-foreground text-center"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                    >
                       No tasks
-                    </div>
+                    </motion.div>
                   )}
                 </div>
                 {totalPages > 1 && (
@@ -268,7 +325,7 @@ function TasksPageContent() {
                     </Pagination>
                   </div>
                 )}
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -304,39 +361,47 @@ function TaskCard({
 }) {
   const next = STATUS_NEXT[task.status];
   return (
-    <Card className="text-sm cursor-pointer hover:ring-1 hover:ring-indigo-500/40 transition-all" onClick={onClick}>
-      <CardHeader className="pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-medium leading-snug">{task.title}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-3">
-        {task.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
-        )}
-        <div className="flex flex-wrap gap-1">
-          {task.project_name && (
-            <Badge variant="outline" className="text-xs">{task.project_name}</Badge>
+    <motion.div
+      whileHover={{ y: -1 }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ duration: 0.15 }}
+    >
+      <Card className="text-sm cursor-pointer hover:ring-1 hover:ring-indigo-500/40 transition-all" onClick={onClick}>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-medium leading-snug">{task.title}</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          {task.description && (
+            <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
           )}
-          {task.assigned_agent && (
-            <Badge variant="secondary" className="text-xs">@{task.assigned_agent}</Badge>
-          )}
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {next && (
-            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" onClick={onAdvance}>
-              {next === "in_progress" ? "Start →" : "Done →"}
+          <div className="flex flex-wrap gap-1">
+            {task.project_name && (
+              <Badge variant="outline" className="text-xs">{task.project_name}</Badge>
+            )}
+            {task.assigned_agent && (
+              <Badge variant="secondary" className="text-xs">@{task.assigned_agent}</Badge>
+            )}
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {next && (
+              <motion.div className="flex-1" whileTap={{ scale: 0.97 }}>
+                <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={onAdvance}>
+                  {next === "in_progress" ? "Start →" : "Done →"}
+                </Button>
+              </motion.div>
+            )}
+            {task.status === "in_progress" && (
+              <Button size="sm" variant="ghost" className="text-xs h-7 text-amber-400 hover:text-amber-300" onClick={onRetry} title="Re-dispatch to pending">
+                ↺ Retry
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="text-xs h-7 text-red-400 hover:text-red-300" onClick={onDelete}>
+              ✕
             </Button>
-          )}
-          {task.status === "in_progress" && (
-            <Button size="sm" variant="ghost" className="text-xs h-7 text-amber-400 hover:text-amber-300" onClick={onRetry} title="Re-dispatch to pending">
-              ↺ Retry
-            </Button>
-          )}
-          <Button size="sm" variant="ghost" className="text-xs h-7 text-red-400 hover:text-red-300" onClick={onDelete}>
-            ✕
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
 
@@ -378,11 +443,18 @@ function TaskForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {error && (
-        <div className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-400">
-          {error}
-        </div>
-      )}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-400"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="space-y-1.5">
         <Label htmlFor="title">Title</Label>
         <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title" required />
@@ -418,9 +490,11 @@ function TaskForm({
         </Select>
       </div>
       <div className="flex justify-end">
-        <Button type="submit" disabled={saving || !title.trim()}>
-          {saving ? "Creating…" : "Create Task"}
-        </Button>
+        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+          <Button type="submit" disabled={saving || !title.trim()}>
+            {saving ? "Creating…" : "Create Task"}
+          </Button>
+        </motion.div>
       </div>
     </form>
   );
