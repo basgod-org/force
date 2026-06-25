@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { AgentGrid } from "@/components/AgentGrid";
 import { AgentHierarchy } from "@/components/AgentHierarchy";
 import { TaskBoard } from "@/components/TaskBoard";
 import { ProjectRegistry } from "@/components/ProjectRegistry";
@@ -81,10 +80,6 @@ export default function Dashboard() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-10">
           <PageSection delay={0.15} icon="⛓" color="text-amber-400" label="Team Hierarchy">
             <AgentHierarchy agents={agents} />
-          </PageSection>
-
-          <PageSection delay={0.25} icon="◈" color="text-violet-400" label="Agents">
-            <AgentGrid agents={agents} onTaskClick={setSelectedTask} />
           </PageSection>
 
           <PageSection delay={0.35} icon="◉" color="text-sky-400" label="Task Board">

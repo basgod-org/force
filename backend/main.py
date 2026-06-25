@@ -21,6 +21,7 @@ from models import (
     Comment, CommentCreate, TaskEvent,
     ChatCreate, ChatReply,
     DirectChatMessage, DirectChatSend, DirectChatAgentReply,
+    ChatSessionSummary,
 )
 
 OPENCLAW_HOOK = "http://127.0.0.1:18789/hooks/agent"
@@ -476,10 +477,15 @@ async def direct_chat_start(agent_id: str, body: DirectChatSend, db: aiosqlite.C
 
     import time
     session_id = f"{agent_id}-{int(time.time() * 1000)}"
+    user_id = body.user_id or "boss"
 
+    await db.execute(
+        "INSERT OR IGNORE INTO agent_chat_sessions (session_id, agent_id, user_id) VALUES (?, ?, ?)",
+        (session_id, agent_id, user_id),
+    )
     cursor = await db.execute(
-        "INSERT INTO agent_direct_chats (agent_id, session_id, author, body) VALUES (?, ?, 'user', ?)",
-        (agent_id, session_id, body.message),
+        "INSERT INTO agent_direct_chats (agent_id, session_id, author, body, user_id) VALUES (?, ?, 'user', ?, ?)",
+        (agent_id, session_id, body.message, user_id),
     )
     await db.commit()
     msg_id = cursor.lastrowid
@@ -494,6 +500,41 @@ async def direct_chat_start(agent_id: str, body: DirectChatSend, db: aiosqlite.C
         "SELECT * FROM agent_direct_chats WHERE id = ?", (msg_id,)
     )).fetchone()
     return [DirectChatMessage(**dict(row))]
+
+
+@app.get("/api/agents/{agent_id}/sessions", response_model=List[ChatSessionSummary])
+async def direct_chat_sessions(agent_id: str, user_id: str = "boss", db: aiosqlite.Connection = Depends(get_db)):
+    """List direct-chat sessions for a user, newest first."""
+    cursor = await db.execute(
+        """
+        SELECT
+            session_id,
+            agent_id,
+            user_id,
+            COUNT(*) AS message_count,
+            MIN(created_at) AS created_at,
+            (SELECT body FROM agent_direct_chats m2
+               WHERE m2.session_id = m1.session_id AND m2.author = 'user'
+               ORDER BY m2.created_at ASC, m2.id ASC LIMIT 1) AS preview
+        FROM agent_direct_chats m1
+        WHERE agent_id = ? AND user_id = ?
+        GROUP BY session_id
+        ORDER BY MAX(created_at) DESC
+        """,
+        (agent_id, user_id),
+    )
+    rows = await cursor.fetchall()
+    return [
+        ChatSessionSummary(
+            session_id=r["session_id"],
+            agent_id=r["agent_id"],
+            user_id=r["user_id"],
+            preview=(r["preview"] or "")[:120],
+            message_count=r["message_count"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
 
 
 @app.get("/api/agents/{agent_id}/direct/{session_id}", response_model=List[DirectChatMessage])
@@ -513,9 +554,14 @@ async def direct_chat_send(agent_id: str, session_id: str, body: DirectChatSend,
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    user_id = body.user_id or "boss"
+    await db.execute(
+        "INSERT OR IGNORE INTO agent_chat_sessions (session_id, agent_id, user_id) VALUES (?, ?, ?)",
+        (session_id, agent_id, user_id),
+    )
     cursor = await db.execute(
-        "INSERT INTO agent_direct_chats (agent_id, session_id, author, body) VALUES (?, ?, 'user', ?)",
-        (agent_id, session_id, body.message),
+        "INSERT INTO agent_direct_chats (agent_id, session_id, author, body, user_id) VALUES (?, ?, 'user', ?, ?)",
+        (agent_id, session_id, body.message, user_id),
     )
     await db.commit()
 

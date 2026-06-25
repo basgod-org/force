@@ -99,6 +99,16 @@ export interface DirectChatMessage {
   author: string;
   body: string;
   created_at: string;
+  user_id?: string;
+}
+
+export interface ChatSessionSummary {
+  session_id: string;
+  agent_id: string;
+  user_id: string;
+  preview: string;
+  message_count: number;
+  created_at: string;
 }
 
 export const api = {
@@ -111,13 +121,15 @@ export const api = {
   agents: {
     list: () => req<Agent[]>("/api/agents"),
     stats: (id: string) => req<AgentStats>(`/api/agents/${id}/stats`),
+    sessions: (agentId: string, userId = "boss") =>
+      req<ChatSessionSummary[]>(`/api/agents/${agentId}/sessions?user_id=${encodeURIComponent(userId)}`),
     direct: {
-      start: (agentId: string, message: string) =>
-        req<DirectChatMessage[]>(`/api/agents/${agentId}/direct`, { method: "POST", body: JSON.stringify({ message }) }),
+      start: (agentId: string, message: string, userId = "boss") =>
+        req<DirectChatMessage[]>(`/api/agents/${agentId}/direct`, { method: "POST", body: JSON.stringify({ message, user_id: userId }) }),
       messages: (agentId: string, sessionId: string) =>
         req<DirectChatMessage[]>(`/api/agents/${agentId}/direct/${sessionId}`),
-      send: (agentId: string, sessionId: string, message: string) =>
-        req<DirectChatMessage>(`/api/agents/${agentId}/direct/${sessionId}`, { method: "POST", body: JSON.stringify({ message }) }),
+      send: (agentId: string, sessionId: string, message: string, userId = "boss") =>
+        req<DirectChatMessage>(`/api/agents/${agentId}/direct/${sessionId}`, { method: "POST", body: JSON.stringify({ message, user_id: userId }) }),
     },
   },
   projects: {

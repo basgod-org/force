@@ -104,10 +104,21 @@ class DirectChatMessage(BaseModel):
     author: str
     body: str
     created_at: str
+    user_id: str = "boss"
 
 
 class DirectChatSend(BaseModel):
     message: str
+    user_id: str = "boss"
+
+
+class ChatSessionSummary(BaseModel):
+    session_id: str
+    agent_id: str
+    user_id: str
+    preview: str
+    message_count: int
+    created_at: str
 
 
 class DirectChatAgentReply(BaseModel):

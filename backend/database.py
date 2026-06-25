@@ -74,12 +74,29 @@ async def init_db():
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_direct_chats ON agent_direct_chats(agent_id, session_id)"
         )
+        # Tracks chat sessions linked to a user identity (auth wired later; default 'boss').
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS agent_chat_sessions (
+                session_id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                user_id TEXT NOT NULL DEFAULT 'boss',
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON agent_chat_sessions(agent_id, user_id)"
+        )
         # Migrate existing DB: add columns if missing
         for col, typedef in [("session_id", "TEXT"), ("agent_type", "TEXT"), ("is_chat", "INTEGER DEFAULT 0")]:
             try:
                 await db.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}")
             except Exception:
                 pass
+        # Link direct-chat messages to a user identity.
+        try:
+            await db.execute("ALTER TABLE agent_direct_chats ADD COLUMN user_id TEXT DEFAULT 'boss'")
+        except Exception:
+            pass
         await db.commit()
         await _seed(db)
 

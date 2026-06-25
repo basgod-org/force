@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Bell } from "lucide-react";
+import { Bell, MessageSquare } from "lucide-react";
 import { useNotifications } from "@/lib/notifications";
 import { formatTime } from "@/lib/utils";
+import { SupportChat } from "@/components/SupportChat";
 
 const AGENT_COLORS: Record<string, string> = {
   dev: "text-blue-400",
@@ -19,6 +20,7 @@ export function TopNav() {
   const { notifications, unreadCount, markRead, markAllRead, openTask } =
     useNotifications();
   const [panelOpen, setPanelOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Close panel on outside click
@@ -217,7 +219,20 @@ export function TopNav() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Support chat bubble */}
+        <motion.button
+          onClick={() => setChatOpen(true)}
+          className="p-2 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors"
+          aria-label="Support chat"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+        >
+          <MessageSquare size={18} />
+        </motion.button>
       </div>
+
+      <SupportChat visible={chatOpen} onClose={() => setChatOpen(false)} />
     </header>
   );
 }
